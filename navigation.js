@@ -1,4 +1,4 @@
-// Enhanced Navigation with MPC Comparison Features
+// Enhanced Navigation for HE-NMPC Dashboard
 class NavigationManager {
     constructor() {
         this.currentTab = 'dashboard';
@@ -12,12 +12,14 @@ class NavigationManager {
         this.setupMPCComparison();
         this.setupRealTimeUpdates();
         this.setupControllerSwitching();
+        
+        console.log('🧭 Navigation Manager Initialized');
     }
 
     setupTabNavigation() {
-        document.querySelectorAll('.nav-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                const tabName = e.target.dataset.tab;
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tabName = e.currentTarget.dataset.tab;
                 this.switchToTab(tabName);
             });
         });
@@ -33,7 +35,7 @@ class NavigationManager {
         });
 
         // Deactivate all tab buttons
-        document.querySelectorAll('.nav-tab').forEach(button => {
+        document.querySelectorAll('.nav-btn').forEach(button => {
             button.classList.remove('active');
         });
 
@@ -49,6 +51,8 @@ class NavigationManager {
             // Trigger tab-specific initializations
             this.onTabChange(tabName);
         }
+
+        console.log('📑 Switched to tab:', tabName);
     }
 
     onTabChange(tabName) {
@@ -69,9 +73,9 @@ class NavigationManager {
 
         // Resize charts if needed
         setTimeout(() => {
-            if (window.chartManager) {
+            if (window.chartManager && window.chartManager.charts) {
                 Object.values(window.chartManager.charts).forEach(chart => {
-                    if (chart.chart && chart.chart.resize) {
+                    if (chart && chart.chart && chart.chart.resize) {
                         chart.chart.resize();
                     }
                 });
@@ -80,7 +84,6 @@ class NavigationManager {
     }
 
     setupMPCComparison() {
-        // Create MPC variant comparison UI
         this.createMPCComparisonPanel();
         this.setupVariantPerformanceTracking();
     }
@@ -89,45 +92,55 @@ class NavigationManager {
         const analyticsTab = document.getElementById('analytics');
         if (!analyticsTab) return;
 
+        // Check if comparison panel already exists
+        if (document.querySelector('.mpc-comparison-grid')) {
+            return;
+        }
+
         // Add MPC comparison section
         const comparisonHTML = `
             <div class="card">
-                <h3>🎯 MPC Variant Performance Comparison</h3>
-                <div class="mpc-comparison-grid">
-                    ${this.mpcVariants.map(variant => `
-                        <div class="mpc-variant-card" data-variant="${variant}">
-                            <div class="variant-header">
-                                <h4>${variant}</h4>
-                                <span class="status-indicator ${variant === 'HE-NMPC' ? 'status-online' : 'status-offline'}"></span>
+                <div class="card-header">
+                    <h3>🎯 MPC Variant Performance Comparison</h3>
+                </div>
+                <div class="card-content">
+                    <div class="mpc-comparison-grid">
+                        ${this.mpcVariants.map(variant => `
+                            <div class="mpc-variant-card" data-variant="${variant}">
+                                <div class="variant-header">
+                                    <h4>${variant}</h4>
+                                    <span class="status-indicator ${variant === 'HE-NMPC' ? 'status-online' : 'status-offline'}"></span>
+                                </div>
+                                <div class="performance-metrics">
+                                    <div class="metric">
+                                        <span class="label">Economic:</span>
+                                        <span class="value" id="${variant}-economic">0%</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="label">Safety:</span>
+                                        <span class="value" id="${variant}-safety">0%</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="label">Speed:</span>
+                                        <span class="value" id="${variant}-speed">0ms</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="label">Cost:</span>
+                                        <span class="value" id="${variant}-cost">$0</span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-outline switch-controller" data-variant="${variant}">
+                                    Switch to ${variant}
+                                </button>
                             </div>
-                            <div class="performance-metrics">
-                                <div class="metric">
-                                    <span class="label">Economic:</span>
-                                    <span class="value" id="${variant}-economic">0%</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="label">Safety:</span>
-                                    <span class="value" id="${variant}-safety">0%</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="label">Speed:</span>
-                                    <span class="value" id="${variant}-speed">0ms</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="label">Cost:</span>
-                                    <span class="value" id="${variant}-cost">$0</span>
-                                </div>
-                            </div>
-                            <button class="btn btn-outline switch-controller" data-variant="${variant}">
-                                Switch to ${variant}
-                            </button>
-                        </div>
-                    `).join('')}
+                        `).join('')}
+                    </div>
                 </div>
             </div>
         `;
 
         analyticsTab.insertAdjacentHTML('beforeend', comparisonHTML);
+        console.log('📊 MPC Comparison Panel Created');
     }
 
     setupVariantPerformanceTracking() {
@@ -141,6 +154,27 @@ class NavigationManager {
                 costScore: 0,
                 lastUpdate: Date.now()
             };
+        });
+
+        // Initialize with default values
+        this.initializeDefaultMetrics();
+    }
+
+    initializeDefaultMetrics() {
+        const defaultMetrics = {
+            'HE-NMPC': { economic: 85, safety: 92, speed: 45, cost: 118 },
+            'Standard-MPC': { economic: 72, safety: 75, speed: 28, cost: 125 },
+            'Stochastic-MPC': { economic: 78, safety: 88, speed: 120, cost: 122 },
+            'Mixed-Integer-MPC': { economic: 70, safety: 72, speed: 350, cost: 127 }
+        };
+
+        Object.entries(defaultMetrics).forEach(([variant, metrics]) => {
+            this.updateMPCPerformance(variant, {
+                economicScore: metrics.economic,
+                safetyScore: metrics.safety,
+                speedScore: metrics.speed,
+                costScore: metrics.cost
+            });
         });
     }
 
@@ -254,7 +288,9 @@ class NavigationManager {
         this.updateControllerStatus();
 
         // Show notification
-        this.showNotification(`Switched to ${variant} controller`, 'success');
+        if (window.electrolyzerApp) {
+            window.electrolyzerApp.showNotification(`Switched to ${variant} controller`, 'success');
+        }
     }
 
     updateControllerStatus() {
@@ -274,6 +310,9 @@ class NavigationManager {
                 switchButton.disabled = variant === this.activeMPCVariant;
                 switchButton.textContent = variant === this.activeMPCVariant ? 
                     'Active' : `Switch to ${variant}`;
+                    
+                switchButton.classList.toggle('btn-success', variant === this.activeMPCVariant);
+                switchButton.classList.toggle('btn-outline', variant !== this.activeMPCVariant);
             }
         });
 
@@ -285,118 +324,90 @@ class NavigationManager {
     }
 
     initializeAnalyticsTab() {
-        // Load comparative performance data
+        console.log('📈 Initializing Analytics Tab');
         this.loadComparativeData();
-        
-        // Start real-time updates for analytics
-        this.startAnalyticsUpdates();
+        this.setupRealTimeUpdates();
     }
 
     initializeSafetyTab() {
-        // Setup safety constraint monitoring
+        console.log('🛡️ Initializing Safety Tab');
         this.setupSafetyAlerts();
     }
 
     initializeEconomicTab() {
-        // Setup economic optimization controls
+        console.log('💰 Initializing Economic Tab');
         this.setupEconomicControls();
     }
 
     initializeSimulinkTab() {
-        // Setup Simulink integration controls
+        console.log('🔬 Initializing Simulink Tab');
         this.setupSimulinkControls();
     }
 
     setupRealTimeUpdates() {
-        // Update MPC comparison every 5 seconds
+        // Update MPC comparison every 10 seconds
         setInterval(() => {
             this.updateRealTimeComparison();
-        }, 5000);
+        }, 10000);
+
+        console.log('🔄 Real-time updates initialized');
     }
 
     updateRealTimeComparison() {
-        // Simulate real-time performance updates
+        // Add small random variations to simulate real-time updates
         this.mpcVariants.forEach(variant => {
-            const metrics = this.generatePerformanceMetrics(variant);
-            this.updateMPCPerformance(variant, metrics);
+            const metrics = this.performanceMetrics[variant];
+            if (metrics) {
+                const updatedMetrics = {
+                    economicScore: metrics.economicScore + (Math.random() * 4 - 2),
+                    safetyScore: metrics.safetyScore + (Math.random() * 2 - 1),
+                    speedScore: metrics.speedScore + (Math.random() * 10 - 5),
+                    costScore: metrics.costScore + (Math.random() * 2 - 1)
+                };
+                
+                // Ensure values stay within reasonable bounds
+                updatedMetrics.economicScore = Math.max(0, Math.min(100, updatedMetrics.economicScore));
+                updatedMetrics.safetyScore = Math.max(0, Math.min(100, updatedMetrics.safetyScore));
+                updatedMetrics.speedScore = Math.max(10, updatedMetrics.speedScore);
+                updatedMetrics.costScore = Math.max(100, updatedMetrics.costScore);
+                
+                this.updateMPCPerformance(variant, updatedMetrics);
+            }
         });
-    }
-
-    generatePerformanceMetrics(variant) {
-        // Generate realistic performance metrics based on variant
-        const baseScores = {
-            'HE-NMPC': { economic: 85, safety: 92, speed: 45, cost: 118 },
-            'Standard-MPC': { economic: 72, safety: 75, speed: 28, cost: 125 },
-            'Stochastic-MPC': { economic: 78, safety: 88, speed: 120, cost: 122 },
-            'Mixed-Integer-MPC': { economic: 70, safety: 72, speed: 350, cost: 127 }
-        };
-
-        const base = baseScores[variant] || baseScores['HE-NMPC'];
-        
-        // Add some random variation
-        return {
-            economicScore: base.economic + (Math.random() * 10 - 5),
-            safetyScore: base.safety + (Math.random() * 5 - 2.5),
-            speedScore: base.speed + (Math.random() * 20 - 10),
-            costScore: base.cost + (Math.random() * 6 - 3)
-        };
     }
 
     loadComparativeData() {
-        // Load historical comparison data
-        console.log('Loading MPC comparative performance data...');
+        console.log('📊 Loading comparative performance data...');
+        // This would typically load data from a server or local storage
     }
 
     setupSafetyAlerts() {
+        console.log('🚨 Safety monitoring initialized');
         // Setup safety constraint alert system
-        console.log('Initializing safety monitoring...');
     }
 
     setupEconomicControls() {
+        console.log('💹 Economic controls initialized');
         // Setup economic optimization controls
-        console.log('Initializing economic controls...');
     }
 
     setupSimulinkControls() {
+        console.log('🔗 Simulink controls initialized');
         // Setup Simulink integration
-        console.log('Initializing Simulink controls...');
     }
 
-    showNotification(message, type = 'info') {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.innerHTML = `
-            <span class="notification-message">${message}</span>
-            <button class="notification-close">&times;</button>
-        `;
-
-        // Add to notification container
-        const container = document.querySelector('.notification-container') || this.createNotificationContainer();
-        container.appendChild(notification);
-
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 5000);
-
-        // Close button handler
-        notification.querySelector('.notification-close').addEventListener('click', () => {
-            notification.parentNode.removeChild(notification);
-        });
-    }
-
-    createNotificationContainer() {
-        const container = document.createElement('div');
-        container.className = 'notification-container';
-        document.body.appendChild(container);
-        return container;
+    // Method to get navigation status
+    getNavigationStatus() {
+        return {
+            currentTab: this.currentTab,
+            activeMPCVariant: this.activeMPCVariant,
+            performanceMetrics: this.performanceMetrics
+        };
     }
 }
 
 // Initialize navigation when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.navigationManager = new NavigationManager();
+    console.log('🧭 Navigation System Ready');
 });
