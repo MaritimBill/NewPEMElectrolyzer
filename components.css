@@ -1,21 +1,128 @@
-/* ===== TAB HEADER ===== */
-.tab-header {
-    margin-bottom: 2rem;
+/* components.css - Additional Analytics Styles */
+
+/* Analytics Tab Specific Styles */
+.metrics-comparison {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
 }
 
-.tab-header h2 {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
+.metric-comparison-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
-.tab-header p {
+.metric-label {
+    font-size: 0.9rem;
     color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.metric-bars {
+    display: flex;
+    gap: 0.5rem;
+    height: 30px;
+    align-items: center;
+}
+
+.metric-bar {
+    height: 20px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 10px;
+    position: relative;
+    transition: all 0.3s ease;
+    min-width: 60px;
+}
+
+.metric-bar.he-nmpc {
+    background: linear-gradient(90deg, var(--accent-primary), #60a5fa);
+}
+
+.metric-bar.traditional {
+    background: linear-gradient(90deg, var(--accent-danger), #f87171);
+}
+
+.metric-value {
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.config-comparison {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.config-item {
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    border-left: 4px solid var(--accent-primary);
+}
+
+.config-item h4 {
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
     font-size: 1rem;
 }
 
-/* ===== CONTROL PANEL STYLES ===== */
+.config-item ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.config-item li {
+    padding: 0.25rem 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Simulink Tab Styles */
+.simulation-params {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.param-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.param-item:last-child {
+    border-bottom: none;
+}
+
+.param-item label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.real-time-data {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.real-time-data .data-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+}
+
+/* Control Panel Styles */
 .control-group {
     display: flex;
     flex-direction: column;
@@ -86,7 +193,7 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* ===== SAFETY CONSTRAINTS ===== */
+/* Safety Constraints */
 .constraints-grid {
     display: grid;
     gap: 1rem;
@@ -106,16 +213,6 @@
     border-left-color: var(--accent-success);
 }
 
-.constraint-item.warning {
-    background: rgba(245, 158, 11, 0.1);
-    border-left-color: var(--accent-warning);
-}
-
-.constraint-item.danger {
-    background: rgba(239, 68, 68, 0.1);
-    border-left-color: var(--accent-danger);
-}
-
 .constraint-label {
     font-weight: 500;
     color: var(--text-primary);
@@ -132,14 +229,11 @@
     font-size: 0.8rem;
     font-weight: 600;
     text-transform: uppercase;
-}
-
-.constraint-item.safe .constraint-status {
     background: var(--accent-success);
     color: white;
 }
 
-/* ===== ECONOMIC METRICS ===== */
+/* Economic Metrics */
 .economic-metrics {
     display: flex;
     flex-direction: column;
@@ -155,44 +249,7 @@
     border-radius: 6px;
 }
 
-.metric-label {
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-.metric-value {
-    color: var(--text-primary);
-    font-weight: 600;
-}
-
-/* ===== KPI GRID ===== */
-.kpi-grid {
-    display: grid;
-    gap: 1rem;
-}
-
-.kpi-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem;
-    background: var(--bg-tertiary);
-    border-radius: 8px;
-    border-left: 4px solid var(--accent-primary);
-}
-
-.kpi-label {
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-.kpi-value {
-    color: var(--text-primary);
-    font-weight: 700;
-    font-size: 1.1rem;
-}
-
-/* ===== CONNECTION STATUS ===== */
+/* Connection Status */
 .connection-status {
     margin-bottom: 1.5rem;
 }
@@ -215,10 +272,6 @@
 
 .status-value.connected {
     color: var(--accent-success);
-}
-
-.status-value.disconnected {
-    color: var(--accent-danger);
 }
 
 .simulink-controls {
