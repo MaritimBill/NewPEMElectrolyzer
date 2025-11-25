@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,341 +7,467 @@
     <link rel="stylesheet" href="main.css">
     <link rel="stylesheet" href="components.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
 </head>
 <body>
-    <div class="container">
+    <div class="app-container">
         <!-- Header -->
         <header class="header">
-            <h1>🛡️ HE-NMPC Electrolyzer Controller</h1>
-            <div class="status-bar">
-                <span id="connectionStatus" class="status-offline">🔴 OFFLINE</span>
-                <span id="systemStatus">System Stopped</span>
-                <span id="currentTime">--:--:--</span>
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">⚡</div>
+                    <h1>HE-NMPC Electrolyzer Controller</h1>
+                </div>
+                <div class="status-bar">
+                    <div class="status-item">
+                        <span class="status-dot" id="connectionStatus"></span>
+                        <span id="connectionText">Connecting...</span>
+                    </div>
+                    <div class="status-item">
+                        <span id="systemStatus">System Ready</span>
+                    </div>
+                    <div class="status-item">
+                        <span id="currentTime">--:--:--</span>
+                    </div>
+                </div>
             </div>
         </header>
 
         <!-- Navigation -->
-        <nav class="nav-tabs" id="navTabs">
-            <button class="nav-tab active" data-tab="dashboard">📊 Dashboard</button>
-            <button class="nav-tab" data-tab="control">🎛️ Control Panel</button>
-            <button class="nav-tab" data-tab="safety">🛡️ Safety MPC</button>
-            <button class="nav-tab" data-tab="economic">💰 Economic MPC</button>
-            <button class="nav-tab" data-tab="simulink">🔬 Simulink</button>
-            <button class="nav-tab" data-tab="analytics">📈 Analytics</button>
+        <nav class="navigation">
+            <div class="nav-container">
+                <button class="nav-btn active" data-tab="dashboard">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">Dashboard</span>
+                </button>
+                <button class="nav-btn" data-tab="control">
+                    <span class="nav-icon">🎛️</span>
+                    <span class="nav-text">Control</span>
+                </button>
+                <button class="nav-btn" data-tab="safety">
+                    <span class="nav-icon">🛡️</span>
+                    <span class="nav-text">Safety MPC</span>
+                </button>
+                <button class="nav-btn" data-tab="economic">
+                    <span class="nav-icon">💰</span>
+                    <span class="nav-text">Economic MPC</span>
+                </button>
+                <button class="nav-btn" data-tab="analytics">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-text">Analytics</span>
+                </button>
+                <button class="nav-btn" data-tab="simulink">
+                    <span class="nav-icon">🔬</span>
+                    <span class="nav-text">Simulink</span>
+                </button>
+            </div>
         </nav>
 
-        <!-- Dashboard Tab -->
-        <div id="dashboard" class="tab-content active">
-            <div class="grid-container">
-                <!-- Process Gauges -->
-                <div class="card">
-                    <h3>⚡ Production Efficiency</h3>
-                    <div class="gauge-container">
-                        <canvas id="efficiencyGauge"></canvas>
-                        <div class="gauge-value" id="efficiencyValue">75%</div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>💨 Oxygen Production</h3>
-                    <div class="gauge-container">
-                        <canvas id="productionGauge"></canvas>
-                        <div class="gauge-value" id="productionValue">30%</div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>🛡️ Safety Margin</h3>
-                    <div class="gauge-container">
-                        <canvas id="safetyGauge"></canvas>
-                        <div class="gauge-value" id="safetyValue">100%</div>
-                    </div>
-                </div>
-
-                <!-- Real-time Charts -->
-                <div class="card chart-card">
-                    <h3>📈 Production Trends</h3>
-                    <canvas id="productionChart"></canvas>
-                </div>
-
-                <div class="card chart-card">
-                    <h3>🌡️ System Parameters</h3>
-                    <canvas id="parametersChart"></canvas>
-                </div>
-
-                <!-- System Status -->
-                <div class="card status-card">
-                    <h3>🔧 System Status</h3>
-                    <div class="status-grid">
-                        <div class="status-item">
-                            <label>Controller Mode:</label>
-                            <span id="controllerMode">HE-NMPC</span>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="grid-layout">
+                    <!-- Key Metrics -->
+                    <div class="metric-card primary">
+                        <div class="metric-header">
+                            <h3>O₂ Production</h3>
+                            <span class="metric-trend positive">+2.3%</span>
                         </div>
-                        <div class="status-item">
-                            <label>Operation Mode:</label>
-                            <span id="operationMode">AUTO</span>
-                        </div>
-                        <div class="status-item">
-                            <label>Safety Violations:</label>
-                            <span id="safetyViolations">0</span>
-                        </div>
-                        <div class="status-item">
-                            <label>Simulink Connection:</label>
-                            <span id="simulinkStatus">Disconnected</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Control Panel Tab -->
-        <div id="control" class="tab-content">
-            <div class="grid-container">
-                <div class="card">
-                    <h3>🎛️ Manual Control</h3>
-                    <div class="control-group">
-                        <label>Production Setpoint:</label>
-                        <input type="range" id="productionSlider" min="0" max="100" value="30" class="slider">
-                        <div class="slider-value">
-                            <span id="sliderValue">30%</span>
-                            <button id="applyManual" class="btn btn-secondary">Apply</button>
-                        </div>
-                    </div>
-                    
-                    <div class="control-group">
-                        <label>Operation Mode:</label>
-                        <div class="button-group">
-                            <button id="autoMode" class="btn btn-primary active">AUTO</button>
-                            <button id="manualMode" class="btn btn-outline">MANUAL</button>
+                        <div class="metric-value" id="productionValue">0%</div>
+                        <div class="metric-chart">
+                            <canvas id="productionMiniChart"></canvas>
                         </div>
                     </div>
 
-                    <div class="control-group">
-                        <label>System Control:</label>
-                        <div class="button-group">
-                            <button id="startSystem" class="btn btn-success">START</button>
-                            <button id="stopSystem" class="btn btn-danger">STOP</button>
-                            <button id="emergencyStop" class="btn btn-warning">EMERGENCY STOP</button>
+                    <div class="metric-card success">
+                        <div class="metric-header">
+                            <h3>Efficiency</h3>
+                            <span class="metric-trend positive">+1.2%</span>
+                        </div>
+                        <div class="metric-value" id="efficiencyValue">75%</div>
+                        <div class="metric-chart">
+                            <canvas id="efficiencyMiniChart"></canvas>
                         </div>
                     </div>
-                </div>
 
-                <div class="card">
-                    <h3>🔧 System Parameters</h3>
-                    <div class="param-grid">
-                        <div class="param-item">
-                            <label>Water Level:</label>
-                            <span id="paramWater">70%</span>
+                    <div class="metric-card warning">
+                        <div class="metric-header">
+                            <h3>Safety Margin</h3>
+                            <span class="metric-trend negative">-0.5%</span>
                         </div>
-                        <div class="param-item">
-                            <label>Chamber Temp:</label>
-                            <span id="paramTemp">25°C</span>
-                        </div>
-                        <div class="param-item">
-                            <label>Oxygen Level:</label>
-                            <span id="paramOxygen">40%</span>
-                        </div>
-                        <div class="param-item">
-                            <label>Hydrogen Level:</label>
-                            <span id="paramHydrogen">30%</span>
-                        </div>
-                        <div class="param-item">
-                            <label>Purity Level:</label>
-                            <span id="paramPurity">99.7%</span>
-                        </div>
-                        <div class="param-item">
-                            <label>Battery Voltage:</label>
-                            <span id="paramBattery">12.2V</span>
+                        <div class="metric-value" id="safetyValue">100%</div>
+                        <div class="metric-chart">
+                            <canvas id="safetyMiniChart"></canvas>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- Safety MPC Tab -->
-        <div id="safety" class="tab-content">
-            <div class="grid-container">
-                <div class="card">
-                    <h3>🛡️ Safety MPC Status</h3>
-                    <div class="safety-grid">
-                        <div class="safety-item critical">
-                            <label>Temperature Constraint:</label>
-                            <span id="tempConstraint">OK</span>
+                    <div class="metric-card info">
+                        <div class="metric-header">
+                            <h3>Temperature</h3>
+                            <span class="metric-trend stable">±0.0%</span>
                         </div>
-                        <div class="safety-item critical">
-                            <label>Purity Constraint:</label>
-                            <span id="purityConstraint">OK</span>
-                        </div>
-                        <div class="safety-item warning">
-                            <label>Reserve Constraint:</label>
-                            <span id="reserveConstraint">OK</span>
-                        </div>
-                        <div class="safety-item info">
-                            <label>QP Solve Time:</label>
-                            <span id="qpSolveTime">0ms</span>
+                        <div class="metric-value" id="temperatureValue">25°C</div>
+                        <div class="metric-chart">
+                            <canvas id="temperatureMiniChart"></canvas>
                         </div>
                     </div>
-                </div>
 
-                <div class="card">
-                    <h3>📊 Constraint Monitoring</h3>
-                    <canvas id="constraintsChart"></canvas>
-                </div>
-
-                <div class="card">
-                    <h3>⚡ Safety Performance</h3>
-                    <div class="performance-grid">
-                        <div class="metric">
-                            <div class="metric-value" id="safetyPerformance">100%</div>
-                            <div class="metric-label">Safety Performance</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-value" id="constraintSatisfaction">100%</div>
-                            <div class="metric-label">Constraint Satisfaction</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-value" id="emergencyEvents">0</div>
-                            <div class="metric-label">Emergency Events</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Economic MPC Tab -->
-        <div id="economic" class="tab-content">
-            <div class="grid-container">
-                <div class="card">
-                    <h3>💰 Economic Optimization</h3>
-                    <div class="economic-controls">
-                        <div class="control-group">
-                            <label>Economic Setpoint:</label>
-                            <input type="range" id="economicSlider" min="0" max="100" value="30" class="slider">
-                            <div class="slider-value">
-                                <span id="economicValue">30%</span>
-                                <button id="applyEconomic" class="btn btn-primary">Apply to Safety MPC</button>
+                    <!-- Main Charts -->
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>Production Trends</h3>
+                            <div class="card-actions">
+                                <button class="btn-icon">📊</button>
+                                <button class="btn-icon">⏱️</button>
                             </div>
                         </div>
-                        
-                        <div class="control-group">
-                            <label>Optimization Parameters:</label>
-                            <div class="param-inputs">
-                                <input type="number" id="powerCost" placeholder="Power Cost ($/kWh)" value="0.15" step="0.01">
-                                <input type="number" id="o2Price" placeholder="O2 Price ($/kg)" value="2.50" step="0.01">
-                            </div>
-                        </div>
-
-                        <button id="runOptimization" class="btn btn-success">Run Economic Optimization</button>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>📈 Economic Metrics</h3>
-                    <div class="metrics-grid">
-                        <div class="economic-metric">
-                            <div class="metric-value" id="levelizedCost">$120.00</div>
-                            <div class="metric-label">Levelized Cost of O₂</div>
-                        </div>
-                        <div class="economic-metric">
-                            <div class="metric-value" id="oxygenAvailability">99.5%</div>
-                            <div class="metric-label">Oxygen Availability</div>
-                        </div>
-                        <div class="economic-metric">
-                            <div class="metric-value" id="pvUtilization">85%</div>
-                            <div class="metric-label">PV Utilization</div>
+                        <div class="card-content">
+                            <canvas id="productionChart"></canvas>
                         </div>
                     </div>
-                </div>
 
-                <div class="card">
-                    <h3>💹 Cost Optimization Chart</h3>
-                    <canvas id="economicChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Simulink Tab -->
-        <div id="simulink" class="tab-content">
-            <div class="grid-container">
-                <div class="card">
-                    <h3>🔬 Simulink Integration</h3>
-                    <div class="simulink-controls">
-                        <div class="control-group">
-                            <label>Simulation Mode:</label>
-                            <div class="button-group">
-                                <button id="enableSimulink" class="btn btn-primary">Enable Simulink</button>
-                                <button id="disableSimulink" class="btn btn-outline">Disable Simulink</button>
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>System Parameters</h3>
+                            <div class="card-actions">
+                                <button class="btn-icon">📊</button>
                             </div>
                         </div>
+                        <div class="card-content">
+                            <canvas id="parametersChart"></canvas>
+                        </div>
+                    </div>
 
-                        <div class="control-group">
-                            <label>Simulation Status:</label>
-                            <div id="simulinkStatusPanel" class="status-panel">
+                    <!-- System Status -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>System Status</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="status-grid">
                                 <div class="status-item">
-                                    <span>MATLAB Connection:</span>
-                                    <span id="matlabStatus">Disconnected</span>
+                                    <label>Controller Mode</label>
+                                    <span class="status-badge success" id="controllerMode">HE-NMPC</span>
                                 </div>
                                 <div class="status-item">
-                                    <span>Data Flow:</span>
-                                    <span id="dataFlowStatus">Inactive</span>
+                                    <label>Operation Mode</label>
+                                    <span class="status-badge info" id="operationMode">AUTO</span>
                                 </div>
                                 <div class="status-item">
-                                    <span>Last Update:</span>
-                                    <span id="lastSimulinkUpdate">Never</span>
+                                    <label>Safety Violations</label>
+                                    <span class="status-badge danger" id="safetyViolations">0</span>
+                                </div>
+                                <div class="status-item">
+                                    <label>Simulink Connection</label>
+                                    <span class="status-badge warning" id="simulinkStatus">Disconnected</span>
                                 </div>
                             </div>
                         </div>
-
-                        <button id="sendToSimulink" class="btn btn-success">Send to Simulink</button>
-                        <button id="requestFromSimulink" class="btn btn-info">Request from Simulink</button>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>📊 Simulink Data</h3>
-                    <div class="data-display">
-                        <pre id="simulinkData">No data received</pre>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Analytics Tab -->
-        <div id="analytics" class="tab-content">
-            <div class="grid-container">
-                <div class="card">
-                    <h3>📊 Performance Analytics</h3>
-                    <canvas id="performanceChart"></canvas>
-                </div>
+            <!-- Control Tab -->
+            <div id="control" class="tab-content">
+                <div class="grid-layout">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Manual Control</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="control-group">
+                                <label>Production Setpoint</label>
+                                <input type="range" id="productionSlider" min="0" max="100" value="30" class="slider">
+                                <div class="slider-value">
+                                    <span id="sliderValue">30%</span>
+                                    <button id="applyManual" class="btn btn-primary">Apply</button>
+                                </div>
+                            </div>
+                            
+                            <div class="control-group">
+                                <label>Operation Mode</label>
+                                <div class="button-group">
+                                    <button id="autoMode" class="btn btn-success active">AUTO</button>
+                                    <button id="manualMode" class="btn btn-outline">MANUAL</button>
+                                </div>
+                            </div>
 
-                <div class="card">
-                    <h3>📈 Historical Trends</h3>
-                    <canvas id="historicalChart"></canvas>
-                </div>
+                            <div class="control-group">
+                                <label>System Control</label>
+                                <div class="button-group">
+                                    <button id="startSystem" class="btn btn-success">START</button>
+                                    <button id="stopSystem" class="btn btn-danger">STOP</button>
+                                    <button id="emergencyStop" class="btn btn-warning">EMERGENCY STOP</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="card">
-                    <h3>🔍 System Diagnostics</h3>
-                    <div class="diagnostics-grid">
-                        <div class="diagnostic-item">
-                            <label>System Uptime:</label>
-                            <span id="systemUptime">00:00:00</span>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>System Parameters</h3>
                         </div>
-                        <div class="diagnostic-item">
-                            <label>Total Production:</label>
-                            <span id="totalProduction">0 kg</span>
-                        </div>
-                        <div class="diagnostic-item">
-                            <label>Average Efficiency:</label>
-                            <span id="avgEfficiency">75%</span>
-                        </div>
-                        <div class="diagnostic-item">
-                            <label>Safety Events:</label>
-                            <span id="totalSafetyEvents">0</span>
+                        <div class="card-content">
+                            <div class="param-grid">
+                                <div class="param-item">
+                                    <label>Water Level</label>
+                                    <span id="paramWater">70%</span>
+                                </div>
+                                <div class="param-item">
+                                    <label>Chamber Temp</label>
+                                    <span id="paramTemp">25°C</span>
+                                </div>
+                                <div class="param-item">
+                                    <label>Oxygen Level</label>
+                                    <span id="paramOxygen">40%</span>
+                                </div>
+                                <div class="param-item">
+                                    <label>Hydrogen Level</label>
+                                    <span id="paramHydrogen">30%</span>
+                                </div>
+                                <div class="param-item">
+                                    <label>Purity Level</label>
+                                    <span id="paramPurity">99.7%</span>
+                                </div>
+                                <div class="param-item">
+                                    <label>Battery Voltage</label>
+                                    <span id="paramBattery">12.2V</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+
+            <!-- Safety MPC Tab -->
+            <div id="safety" class="tab-content">
+                <div class="grid-layout">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Safety MPC Status</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="safety-grid">
+                                <div class="safety-item critical">
+                                    <label>Temperature Constraint</label>
+                                    <span id="tempConstraint">OK</span>
+                                </div>
+                                <div class="safety-item critical">
+                                    <label>Purity Constraint</label>
+                                    <span id="purityConstraint">OK</span>
+                                </div>
+                                <div class="safety-item warning">
+                                    <label>Reserve Constraint</label>
+                                    <span id="reserveConstraint">OK</span>
+                                </div>
+                                <div class="safety-item info">
+                                    <label>QP Solve Time</label>
+                                    <span id="qpSolveTime">0ms</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>Constraint Monitoring</h3>
+                        </div>
+                        <div class="card-content">
+                            <canvas id="constraintsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Safety Performance</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="performance-grid">
+                                <div class="metric">
+                                    <div class="metric-value" id="safetyPerformance">100%</div>
+                                    <div class="metric-label">Safety Performance</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="constraintSatisfaction">100%</div>
+                                    <div class="metric-label">Constraint Satisfaction</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="emergencyEvents">0</div>
+                                    <div class="metric-label">Emergency Events</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Economic MPC Tab -->
+            <div id="economic" class="tab-content">
+                <div class="grid-layout">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Economic Optimization</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="economic-controls">
+                                <div class="control-group">
+                                    <label>Economic Setpoint</label>
+                                    <input type="range" id="economicSlider" min="0" max="100" value="30" class="slider">
+                                    <div class="slider-value">
+                                        <span id="economicValue">30%</span>
+                                        <button id="applyEconomic" class="btn btn-primary">Apply to Safety MPC</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="control-group">
+                                    <label>Optimization Parameters</label>
+                                    <div class="param-inputs">
+                                        <input type="number" id="powerCost" placeholder="Power Cost ($/kWh)" value="0.15" step="0.01">
+                                        <input type="number" id="o2Price" placeholder="O2 Price ($/kg)" value="2.50" step="0.01">
+                                    </div>
+                                </div>
+
+                                <button id="runOptimization" class="btn btn-success">Run Economic Optimization</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Economic Metrics</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="metrics-grid">
+                                <div class="economic-metric">
+                                    <div class="metric-value" id="levelizedCost">$120.00</div>
+                                    <div class="metric-label">Levelized Cost of O₂</div>
+                                </div>
+                                <div class="economic-metric">
+                                    <div class="metric-value" id="oxygenAvailability">99.5%</div>
+                                    <div class="metric-label">Oxygen Availability</div>
+                                </div>
+                                <div class="economic-metric">
+                                    <div class="metric-value" id="pvUtilization">85%</div>
+                                    <div class="metric-label">PV Utilization</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>Cost Optimization</h3>
+                        </div>
+                        <div class="card-content">
+                            <canvas id="economicChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div id="analytics" class="tab-content">
+                <div class="grid-layout">
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>MPC Variant Performance Comparison</h3>
+                        </div>
+                        <div class="card-content">
+                            <canvas id="mpcComparisonChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>Performance Trends</h3>
+                        </div>
+                        <div class="card-content">
+                            <canvas id="performanceChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Performance Metrics</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="analytics-grid">
+                                <div class="analytics-metric">
+                                    <div class="metric-value" id="predictionAccuracy">85%</div>
+                                    <div class="metric-label">Prediction Accuracy</div>
+                                </div>
+                                <div class="analytics-metric">
+                                    <div class="metric-value" id="optimizationImprovement">12%</div>
+                                    <div class="metric-label">Optimization Improvement</div>
+                                </div>
+                                <div class="analytics-metric">
+                                    <div class="metric-value" id="learningProgress">65%</div>
+                                    <div class="metric-label">Learning Progress</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulink Tab -->
+            <div id="simulink" class="tab-content">
+                <div class="grid-layout">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Simulink Integration</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="simulink-controls">
+                                <div class="control-group">
+                                    <label>Simulation Mode</label>
+                                    <div class="button-group">
+                                        <button id="enableSimulink" class="btn btn-primary">Enable Simulink</button>
+                                        <button id="disableSimulink" class="btn btn-outline">Disable Simulink</button>
+                                    </div>
+                                </div>
+
+                                <div class="control-group">
+                                    <label>Simulation Status</label>
+                                    <div class="status-panel">
+                                        <div class="status-item">
+                                            <span>MATLAB Connection:</span>
+                                            <span id="matlabStatus">Disconnected</span>
+                                        </div>
+                                        <div class="status-item">
+                                            <span>Data Flow:</span>
+                                            <span id="dataFlowStatus">Inactive</span>
+                                        </div>
+                                        <div class="status-item">
+                                            <span>Last Update:</span>
+                                            <span id="lastSimulinkUpdate">Never</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button id="sendToSimulink" class="btn btn-success">Send to Simulink</button>
+                                <button id="requestFromSimulink" class="btn btn-info">Request from Simulink</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>Simulink Data</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="data-display">
+                                <pre id="simulinkData">Waiting for data...</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Notification Container -->
+        <div class="notification-container" id="notificationContainer"></div>
     </div>
 
     <!-- JavaScript Files -->
