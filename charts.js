@@ -47,7 +47,11 @@ class ChartManager {
     destroyAllCharts() {
         this.charts.forEach((chart, chartId) => {
             if (chart && typeof chart.destroy === 'function') {
-                chart.destroy();
+                try {
+                    chart.destroy();
+                } catch (error) {
+                    console.warn(`Error destroying chart ${chartId}:`, error);
+                }
             }
         });
         this.charts.clear();
@@ -354,10 +358,10 @@ class ChartManager {
             return;
         }
 
-        // Check if canvas is actually visible and has dimensions
-        if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
-            console.log('Safety chart canvas has zero dimensions (likely hidden), delaying initialization');
-            setTimeout(() => this.createSafetyChart(), 500);
+        // Don't initialize if canvas is hidden
+        const style = window.getComputedStyle(canvas);
+        if (style.display === 'none' || canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+            console.log('Safety chart canvas is hidden, will initialize when tab is activated');
             return;
         }
 
@@ -365,67 +369,71 @@ class ChartManager {
         if (existingChart) existingChart.destroy();
 
         const ctx = canvas.getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: this.generateTimeLabels(8),
-                datasets: [
-                    {
-                        label: 'Temperature Margin',
-                        data: [],
-                        borderColor: '#ef4444',
-                        backgroundColor: this.hexToRgba('#ef4444', 0.1),
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true
-                    },
-                    {
-                        label: 'Pressure Margin',
-                        data: [],
-                        borderColor: '#f59e0b',
-                        backgroundColor: this.hexToRgba('#f59e0b', 0.1),
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: { color: '#e5e7eb' }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Safety Margins - Awaiting Simulation Data',
-                        color: '#f9fafb'
-                    }
+        try {
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: this.generateTimeLabels(8),
+                    datasets: [
+                        {
+                            label: 'Temperature Margin',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: this.hexToRgba('#ef4444', 0.1),
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Pressure Margin',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            backgroundColor: this.hexToRgba('#f59e0b', 0.1),
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
                 },
-                scales: {
-                    x: {
-                        grid: { color: '#374151' },
-                        ticks: { color: '#9ca3af' }
-                    },
-                    y: {
-                        grid: { color: '#374151' },
-                        ticks: { color: '#9ca3af' },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { color: '#e5e7eb' }
+                        },
                         title: {
                             display: true,
-                            text: 'Safety Margin (%)',
-                            color: '#9ca3af'
+                            text: 'Safety Margins - Awaiting Simulation Data',
+                            color: '#f9fafb'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#374151' },
+                            ticks: { color: '#9ca3af' }
                         },
-                        beginAtZero: true,
-                        max: 100
+                        y: {
+                            grid: { color: '#374151' },
+                            ticks: { color: '#9ca3af' },
+                            title: {
+                                display: true,
+                                text: 'Safety Margin (%)',
+                                color: '#9ca3af'
+                            },
+                            beginAtZero: true,
+                            max: 100
+                        }
                     }
                 }
-            }
-        });
+            });
 
-        this.charts.set('safetyChart', chart);
-        console.log('Safety chart initialized successfully');
+            this.charts.set('safetyChart', chart);
+            console.log('Safety chart initialized successfully');
+        } catch (error) {
+            console.error('Error creating safety chart:', error);
+        }
     }
 
     createEconomicChart() {
@@ -764,9 +772,17 @@ class ChartManager {
     }
 
     resizeCharts() {
-        this.charts.forEach(chart => {
+        this.charts.forEach((chart, chartId) => {
             if (chart && typeof chart.resize === 'function') {
-                chart.resize();
+                try {
+                    // Only resize if canvas is visible and has dimensions
+                    const canvas = chart.canvas;
+                    if (canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0) {
+                        chart.resize();
+                    }
+                } catch (error) {
+                    console.warn(`Could not resize chart ${chartId}:`, error);
+                }
             }
         });
     }
@@ -829,7 +845,7 @@ class ChartManager {
         // Update parameters chart with real data
         const parametersChart = this.charts.get('parametersChart');
         if (parametersChart && data.voltage !== undefined) {
-            this.updateParametersChart(parametersChart, data);
+            this.updateParametersChart(data);
             
             // Update chart title to show data is live
             parametersChart.options.plugins.title.text = 'System Parameters (Live Simulation)';
@@ -937,8 +953,9 @@ class ChartManager {
         }
     }
 
-    updateParametersChart(chart, data) {
-        if (chart.data.datasets[0]) {
+    updateParametersChart(data) {
+        const chart = this.charts.get('parametersChart');
+        if (chart && chart.data.datasets[0]) {
             // Update with real parameter data
             chart.data.datasets[0].data = [
                 data.voltage || 0,
@@ -995,35 +1012,39 @@ class ChartManager {
 
         console.log('Updating all charts with simulation data:', simulationData);
 
-        // Update main production charts
-        if (simulationData.o2Production !== undefined) {
-            this.updateProductionData(simulationData);
-        }
+        try {
+            // Update main production charts
+            if (simulationData.o2Production !== undefined) {
+                this.updateProductionData(simulationData);
+            }
 
-        // Update parameters chart
-        if (simulationData.voltage !== undefined) {
-            this.updateParametersData(simulationData);
-        }
+            // Update parameters chart - FIXED METHOD NAME
+            if (simulationData.voltage !== undefined) {
+                this.updateParametersChart(simulationData);
+            }
 
-        // Update mini charts
-        this.updateMiniCharts(simulationData);
+            // Update mini charts
+            this.updateMiniCharts(simulationData);
 
-        // Update MPC performance comparison if we have the data
-        if (simulationData.mpcComparison) {
-            this.updatePerformanceChart(
-                simulationData.mpcComparison.heNmpc,
-                simulationData.mpcComparison.traditional
-            );
-        }
+            // Update MPC performance comparison if we have the data
+            if (simulationData.mpcComparison) {
+                this.updatePerformanceChart(
+                    simulationData.mpcComparison.heNmpc,
+                    simulationData.mpcComparison.traditional
+                );
+            }
 
-        // Update safety margins
-        if (simulationData.safetyMetrics) {
-            this.updateSafetyData(simulationData.safetyMetrics);
-        }
+            // Update safety margins
+            if (simulationData.safetyMetrics) {
+                this.updateSafetyData(simulationData.safetyMetrics);
+            }
 
-        // Update economic data
-        if (simulationData.economicMetrics) {
-            this.updateEconomicData(simulationData.economicMetrics);
+            // Update economic data
+            if (simulationData.economicMetrics) {
+                this.updateEconomicData(simulationData.economicMetrics);
+            }
+        } catch (error) {
+            console.error('Error updating charts with simulation data:', error);
         }
     }
 
