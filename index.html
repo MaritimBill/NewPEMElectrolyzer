@@ -287,5 +287,39 @@
     <script src="neural-mpc.js"></script>
     <script src="simulink-bridge.js"></script>
     <script src="app.js"></script>
+    <!-- Debug Console -->
+<div id="debugConsole" style="position: fixed; bottom: 10px; right: 10px; background: #1f2937; color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 10000; max-width: 300px; display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <strong>Debug Console</strong>
+        <button onclick="document.getElementById('debugConsole').style.display = 'none'">×</button>
+    </div>
+    <div id="debugContent"></div>
+</div>
+
+<script>
+// Debug function to show what's happening
+function showDebug(message) {
+    const console = document.getElementById('debugConsole');
+    const content = document.getElementById('debugContent');
+    if (console && content) {
+        console.style.display = 'block';
+        content.innerHTML = message + '<br>' + content.innerHTML;
+    }
+    console.log('DEBUG:', message);
+}
+
+// Test if charts are loading
+document.addEventListener('DOMContentLoaded', function() {
+    showDebug('DOM Loaded - Checking charts...');
+    
+    // Check if canvas elements exist
+    const canvases = document.querySelectorAll('canvas');
+    showDebug('Found ' + canvases.length + ' canvas elements');
+    
+    canvases.forEach((canvas, index) => {
+        showDebug('Canvas ' + index + ': ' + canvas.id + ' - width: ' + canvas.offsetWidth + 'px');
+    });
+});
+</script>
 </body>
 </html>
