@@ -1,4 +1,4 @@
-// app.js - Main Application Controller for PEM Electrolyzer
+// app.js - Main Application Controller for PEM Electrolyzer - REAL DATA ONLY
 class ElectrolyzerApp {
     constructor() {
         this.mqttClient = null;
@@ -7,23 +7,16 @@ class ElectrolyzerApp {
         this.isConnected = false;
         this.chartManager = null;
         this.dataUpdateInterval = null;
-        this.simulationMode = true;
+        this.simulationMode = false; // Start as false - only true if simulation is active
         this.connectionStatus = {
             mqtt: false,
             simulink: false,
             plc: false
         };
         
-        this.defaultValues = {
-            o2Production: 45,
-            efficiency: 78,
-            stackTemperature: 65,
-            safetyMargin: 95,
-            powerConsumption: 150,
-            voltage: 2.1,
-            current: 150,
-            pressure: 35,
-            purity: 99.8
+        // NO DEFAULT VALUES - only use data from system
+        this.systemData = {
+            // Will be populated by real data from MQTT/Simulink
         };
         
         this.init();
@@ -32,25 +25,45 @@ class ElectrolyzerApp {
     init() {
         console.log('HE-NMPC Electrolyzer Controller Initializing...');
         
-        // Initialize components in sequence
+        // Wait for DOM to be fully ready before initializing charts
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.initializeApp());
+        } else {
+            this.initializeApp();
+        }
+    }
+
+    initializeApp() {
+        console.log('DOM fully loaded, initializing components...');
+        
+        // Initialize components in correct order
         this.initChartManager();
         this.initEventListeners();
         this.updateSystemStatus();
-        this.startDataUpdates();
         
-        // Try to connect to MQTT, fallback to simulation
+        // Connect to real data sources
         this.connectMQTT().catch(error => {
-            console.warn('MQTT connection failed, running in simulation mode:', error);
-            this.simulationMode = true;
+            console.error('MQTT connection failed:', error);
             this.updateConnectionStatus('mqtt', false);
+            this.showNotification('MQTT Connection Failed - Waiting for data source', 'warning');
         });
         
-        console.log('HE-NMPC Electrolyzer Controller Initialized - Simulation Mode:', this.simulationMode);
+        // Initialize Simulink bridge if available
+        this.initSimulinkBridge();
+        
+        console.log('HE-NMPC Electrolyzer Controller Initialized - Awaiting Real Data');
     }
 
     initChartManager() {
-        this.chartManager = new ChartManager();
-        console.log('Chart Manager Initialized');
+        try {
+            // Wait a bit to ensure DOM is fully rendered
+            setTimeout(() => {
+                this.chartManager = new ChartManager();
+                console.log('Chart Manager Initialized - Ready for Real Data');
+            }, 100);
+        } catch (error) {
+            console.error('Error initializing chart manager:', error);
+        }
     }
 
     initEventListeners() {
@@ -79,7 +92,7 @@ class ElectrolyzerApp {
                         break;
                     case 'd':
                         e.preventDefault();
-                        this.toggleDashboard();
+                        this.toggleDataView();
                         break;
                 }
             }
@@ -90,8 +103,8 @@ class ElectrolyzerApp {
 
     connectMQTT() {
         return new Promise((resolve, reject) => {
-            // MQTT connection configuration
-            const host = 'ws://localhost:9001';
+            // MQTT connection configuration - CONNECT TO REAL SYSTEM
+            const host = 'ws://localhost:9001'; // Your MQTT broker
             const clientId = 'electrolyzer_ui_' + Math.random().toString(16).substr(2, 8);
             
             try {
@@ -100,31 +113,33 @@ class ElectrolyzerApp {
                 this.mqttClient.onConnectionLost = (response) => {
                     console.error('MQTT Connection lost:', response.errorMessage);
                     this.updateConnectionStatus('mqtt', false);
-                    this.simulationMode = true;
+                    this.showNotification('MQTT Connection Lost', 'error');
                 };
                 
                 this.mqttClient.onMessageArrived = (message) => {
-                    this.handleMessage(message.destinationName, message.payloadString);
+                    this.handleRealTimeData(message.destinationName, message.payloadString);
                 };
                 
                 const connectOptions = {
                     timeout: 3,
                     onSuccess: () => {
-                        console.log('MQTT Connected successfully');
+                        console.log('MQTT Connected successfully to real system');
                         this.isConnected = true;
-                        this.simulationMode = false;
                         this.updateConnectionStatus('mqtt', true);
                         
-                        // Subscribe to topics
+                        // Subscribe to real system topics
                         this.mqttClient.subscribe('electrolyzer/+/data');
                         this.mqttClient.subscribe('electrolyzer/status');
                         this.mqttClient.subscribe('electrolyzer/alerts');
+                        this.mqttClient.subscribe('electrolyzer/parameters');
                         
+                        this.showNotification('Connected to Real System Data', 'success');
                         resolve();
                     },
                     onFailure: (error) => {
                         console.error('MQTT Connection failed:', error);
                         this.updateConnectionStatus('mqtt', false);
+                        this.showNotification('Cannot connect to MQTT broker', 'warning');
                         reject(error);
                     }
                 };
@@ -138,50 +153,35 @@ class ElectrolyzerApp {
         });
     }
 
-    startDataUpdates() {
-        // Clear any existing interval
-        if (this.dataUpdateInterval) {
-            clearInterval(this.dataUpdateInterval);
-        }
-
-        // Start data simulation/update interval
-        this.dataUpdateInterval = setInterval(() => {
-            if (this.simulationMode && !this.isConnected) {
-                this.simulateLiveData();
+    initSimulinkBridge() {
+        // Initialize connection to Simulink for real data
+        if (typeof window.SimulinkBridge !== 'undefined') {
+            try {
+                window.simulinkBridge = new window.SimulinkBridge();
+                window.simulinkBridge.onDataReceived = (data) => {
+                    this.handleRealTimeData('simulink/data', JSON.stringify(data));
+                };
+                this.updateConnectionStatus('simulink', true);
+                console.log('Simulink bridge initialized');
+            } catch (error) {
+                console.warn('Simulink bridge not available:', error);
+                this.updateConnectionStatus('simulink', false);
             }
-        }, 2000); // Update every 2 seconds
-
-        // Update time display every second
-        setInterval(() => {
-            this.updateTimeDisplay();
-        }, 1000);
+        } else {
+            console.log('Simulink bridge not found - relying on MQTT data');
+        }
     }
 
-    simulateLiveData() {
-        const baseValues = { ...this.defaultValues };
-        
-        // Add realistic variations
-        const simulatedData = {
-            o2Production: Math.max(0, baseValues.o2Production + (Math.random() - 0.5) * 4),
-            efficiency: Math.max(0, Math.min(100, baseValues.efficiency + (Math.random() - 0.5) * 2)),
-            stackTemperature: Math.max(20, baseValues.stackTemperature + (Math.random() - 0.5) * 3),
-            safetyMargin: Math.max(0, Math.min(100, baseValues.safetyMargin + (Math.random() - 0.5) * 1)),
-            powerConsumption: Math.max(0, baseValues.powerConsumption + (Math.random() - 0.5) * 10),
-            voltage: Math.max(0, baseValues.voltage + (Math.random() - 0.5) * 0.1),
-            current: Math.max(0, baseValues.current + (Math.random() - 0.5) * 5),
-            pressure: Math.max(0, baseValues.pressure + (Math.random() - 0.5) * 2),
-            purity: Math.max(98, Math.min(100, baseValues.purity + (Math.random() - 0.5) * 0.1)),
-            h2Production: (baseValues.o2Production * 2) + (Math.random() - 0.5) * 8,
-            timestamp: new Date().toISOString(),
-            source: 'simulation'
-        };
-
-        this.handleMessage('electrolyzer/simulation/data', JSON.stringify(simulatedData));
-    }
-
-    handleMessage(topic, message) {
+    handleRealTimeData(topic, message) {
         try {
             const data = JSON.parse(message);
+            
+            // Validate data structure
+            if (!this.isValidElectrolyzerData(data)) {
+                console.warn('Invalid data structure received:', data);
+                return;
+            }
+            
             this.currentData = data;
             
             // Add timestamp if not present
@@ -189,24 +189,35 @@ class ElectrolyzerApp {
                 data.timestamp = new Date().toISOString();
             }
             
+            // Store in history
             this.history.push({...data, timestamp: Date.now()});
             
-            // Keep history manageable for performance
+            // Keep history manageable
             if (this.history.length > 1000) {
                 this.history = this.history.slice(-1000);
             }
             
+            // Update UI with real data
             this.updateDashboard(data);
             this.updateCharts(data);
             this.updateLiveDataFeed(data);
             this.updateSystemMetrics(data);
             
+            console.log('Real data processed:', data);
+            
         } catch (error) {
-            console.error('Error processing message:', error);
+            console.error('Error processing real-time data:', error);
         }
     }
 
+    isValidElectrolyzerData(data) {
+        // Basic validation - ensure we have essential electrolyzer parameters
+        const requiredFields = ['o2Production', 'efficiency', 'stackTemperature'];
+        return requiredFields.every(field => data[field] !== undefined && data[field] !== null);
+    }
+
     updateDashboard(data) {
+        // Update main metrics with real data
         this.updateMetricValue('productionValue', data.o2Production, '%');
         this.updateMetricValue('efficiencyValue', data.efficiency, '%');
         this.updateMetricValue('safetyValue', data.safetyMargin, '%');
@@ -218,7 +229,7 @@ class ElectrolyzerApp {
         if (element && value !== undefined && value !== null) {
             element.textContent = value.toFixed(1) + suffix;
             
-            // Add animation effect
+            // Add animation effect for live data
             element.style.transform = 'scale(1.05)';
             setTimeout(() => {
                 element.style.transform = 'scale(1)';
@@ -227,6 +238,7 @@ class ElectrolyzerApp {
     }
 
     updateLiveDataFeed(data) {
+        // Update live data display with real values
         this.updateLiveValue('liveO2Production', data.o2Production, '%');
         this.updateLiveValue('liveEfficiency', data.efficiency, '%');
         this.updateLiveValue('liveTemperature', data.stackTemperature, '°C');
@@ -242,10 +254,11 @@ class ElectrolyzerApp {
     }
 
     updateSystemMetrics(data) {
-        // Update system status badges
+        // Update system status with real data
         this.updateStatusBadge('controllerMode', 'HE-NMPC', 'success');
-        this.updateStatusBadge('operationMode', this.simulationMode ? 'SIMULATION' : 'AUTO', 'info');
-        this.updateStatusBadge('safetyViolations', '0', 'success');
+        this.updateStatusBadge('operationMode', this.isConnected ? 'LIVE' : 'STANDBY', 'info');
+        this.updateStatusBadge('safetyViolations', data.safetyViolations || '0', 
+                              (data.safetyViolations && data.safetyViolations > 0) ? 'danger' : 'success');
         this.updateStatusBadge('simulinkStatus', this.connectionStatus.simulink ? 'Connected' : 'Disconnected', 
                               this.connectionStatus.simulink ? 'success' : 'warning');
     }
@@ -260,7 +273,11 @@ class ElectrolyzerApp {
 
     updateCharts(data) {
         if (this.chartManager) {
-            this.chartManager.updateCharts(data);
+            try {
+                this.chartManager.updateCharts(data);
+            } catch (error) {
+                console.error('Error updating charts with real data:', error);
+            }
         }
     }
 
@@ -276,7 +293,7 @@ class ElectrolyzerApp {
                 textElement.textContent = 'Connected';
             } else {
                 statusElement.className = 'status-dot disconnected';
-                textElement.textContent = this.simulationMode ? 'Simulation Mode' : 'Disconnected';
+                textElement.textContent = 'Disconnected';
             }
         }
     }
@@ -284,40 +301,44 @@ class ElectrolyzerApp {
     updateSystemStatus() {
         const systemStatusElement = document.getElementById('systemStatus');
         if (systemStatusElement) {
-            systemStatusElement.textContent = this.simulationMode ? 
-                'System Ready (Simulation)' : 'System Ready (Live)';
-        }
-    }
-
-    updateTimeDisplay() {
-        const timeElement = document.getElementById('currentTime');
-        if (timeElement) {
-            const now = new Date();
-            timeElement.textContent = now.toLocaleTimeString('en-US', {
-                hour12: false,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+            systemStatusElement.textContent = this.isConnected ? 
+                'System Live - Receiving Real Data' : 'System Standby - Awaiting Data';
         }
     }
 
     handleControlAction(action) {
         console.log('Control action triggered:', action);
         
+        // Send control commands to real system
         switch(action) {
             case 'start':
-                this.showNotification('Starting electrolyzer system...', 'info');
+                this.sendControlCommand('start');
+                this.showNotification('Sending START command to system...', 'info');
                 break;
             case 'stop':
-                this.showNotification('Stopping electrolyzer system...', 'warning');
+                this.sendControlCommand('stop');
+                this.showNotification('Sending STOP command to system...', 'warning');
                 break;
             case 'reset':
-                this.showNotification('Resetting system parameters...', 'info');
+                this.sendControlCommand('reset');
+                this.showNotification('Sending RESET command to system...', 'info');
                 break;
             case 'emergency':
+                this.sendControlCommand('emergency_stop');
                 this.showNotification('EMERGENCY STOP ACTIVATED!', 'error');
                 break;
+        }
+    }
+
+    sendControlCommand(command) {
+        // Send command to real system via MQTT
+        if (this.mqttClient && this.isConnected) {
+            const message = new Paho.MQTT.Message(JSON.stringify({
+                command: command,
+                timestamp: new Date().toISOString()
+            }));
+            message.destinationName = 'electrolyzer/control';
+            this.mqttClient.send(message);
         }
     }
 
@@ -332,7 +353,7 @@ class ElectrolyzerApp {
             </div>
         `;
         
-        // Add to notification container or create one
+        // Add to notification container
         let container = document.getElementById('notification-container');
         if (!container) {
             container = document.createElement('div');
@@ -358,16 +379,24 @@ class ElectrolyzerApp {
     }
 
     refreshData() {
-        console.log('Manual data refresh triggered');
-        if (this.simulationMode) {
-            this.simulateLiveData();
+        console.log('Manual data refresh requested');
+        this.showNotification('Refreshing data from system...', 'info');
+        
+        // Request latest data from system
+        if (this.mqttClient && this.isConnected) {
+            const message = new Paho.MQTT.Message(JSON.stringify({
+                request: 'latest_data',
+                timestamp: new Date().toISOString()
+            }));
+            message.destinationName = 'electrolyzer/request';
+            this.mqttClient.send(message);
         }
-        this.showNotification('Data refreshed', 'info');
     }
 
-    toggleDashboard() {
-        // Toggle between different dashboard views
-        console.log('Dashboard view toggled');
+    toggleDataView() {
+        // Toggle between different data views
+        console.log('Data view toggled');
+        this.showNotification('Data view changed', 'info');
     }
 
     // Public method to get current system state
@@ -377,7 +406,8 @@ class ElectrolyzerApp {
             simulationMode: this.simulationMode,
             currentData: this.currentData,
             connectionStatus: this.connectionStatus,
-            historyLength: this.history.length
+            historyLength: this.history.length,
+            lastUpdate: this.currentData ? this.currentData.timestamp : null
         };
     }
 
