@@ -34,41 +34,47 @@ class NavigationManager {
         this.setupSimulinkControls();
     }
 
-    switchToTab(tabName) {
-        console.log('Switching to tab:', tabName);
-        
-        // Hide all tabs
-        document.querySelectorAll('.tab-content').forEach(tab => {
-            tab.style.display = 'none';
-        });
+ switchToTab(tabName) {
+    console.log('Switching to tab:', tabName);
+    
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.style.display = 'none';
+    });
 
-        // Remove active class from all buttons
-        document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
+    // Remove active class from all buttons
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
 
-        // Show selected tab and activate button
-        const targetTab = document.getElementById(tabName);
-        const targetButton = document.querySelector(`[data-tab="${tabName}"]`);
+    // Show selected tab and activate button
+    const targetTab = document.getElementById(tabName);
+    const targetButton = document.querySelector(`[data-tab="${tabName}"]`);
+    
+    if (targetTab && targetButton) {
+        targetTab.style.display = 'block';
+        targetButton.classList.add('active');
+        this.currentTab = tabName;
         
-        if (targetTab && targetButton) {
-            targetTab.style.display = 'block';
-            targetButton.classList.add('active');
-            this.currentTab = tabName;
-            
-            // Update tab-specific content
-            this.updateTabContent(tabName);
-            
-            // Resize charts when switching tabs
-            setTimeout(() => {
-                if (window.chartManager) {
-                    window.chartManager.resizeCharts();
-                }
-            }, 100);
-        } else {
-            console.error(`Tab or button not found: ${tabName}`);
+        // Trigger chart initialization for this tab
+        if (window.chartManager) {
+            window.chartManager.initializeTabCharts(tabName);
         }
+        
+        // Dispatch custom event for tab change
+        const event = new CustomEvent('tabChanged', {
+            detail: { tabName: tabName }
+        });
+        document.dispatchEvent(event);
+        
+        // Resize charts when switching tabs
+        setTimeout(() => {
+            if (window.chartManager) {
+                window.chartManager.resizeCharts();
+            }
+        }, 100);
     }
+}
 
     updateTabContent(tabName) {
         switch(tabName) {
