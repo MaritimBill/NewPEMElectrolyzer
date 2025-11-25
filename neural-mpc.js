@@ -1,4 +1,4 @@
-// Neural MPC Integration and Advanced Analytics
+// Enhanced Neural MPC with Complete Lifecycle Management
 class NeuralMPCManager {
     constructor() {
         this.isEnabled = false;
@@ -6,6 +6,9 @@ class NeuralMPCManager {
         this.learningRate = 0.01;
         this.neuralNetwork = null;
         this.performanceHistory = [];
+        this.modelVersions = [];
+        this.trainingSchedule = null;
+        this.retrainingThreshold = 0.85; // 85% accuracy threshold
         this.init();
     }
 
@@ -13,573 +16,556 @@ class NeuralMPCManager {
         this.setupNeuralNetwork();
         this.setupMPCOptimization();
         this.setupLearningSystem();
-        console.log('🧠 Neural MPC Manager Initialized');
+        this.setupLifecycleManagement();
+        console.log('🧠 Neural MPC Manager with Lifecycle Initialized');
     }
 
-    setupNeuralNetwork() {
-        // Initialize neural network for predictive control
-        this.neuralNetwork = {
-            layers: [
-                { type: 'input', neurons: 8 },
-                { type: 'hidden', neurons: 12, activation: 'relu' },
-                { type: 'hidden', neurons: 8, activation: 'relu' },
-                { type: 'hidden', neurons: 6, activation: 'relu' },
-                { type: 'output', neurons: 4, activation: 'linear' }
-            ],
-            weights: [],
-            biases: [],
-            trained: false
+    setupLifecycleManagement() {
+        this.lifecycleConfig = {
+            // Training configuration
+            autoRetrain: true,
+            retrainInterval: 24 * 60 * 60 * 1000, // 24 hours
+            minTrainingSamples: 1000,
+            validationSplit: 0.2,
+            
+            // Model versioning
+            maxModelVersions: 5,
+            versionAutoCleanup: true,
+            
+            // Performance monitoring
+            performanceDecayThreshold: 0.1, // 10% performance drop
+            dataDriftThreshold: 0.15,
+            
+            // Retraining triggers
+            retrainOnPerformanceDrop: true,
+            retrainOnDataDrift: true,
+            retrainOnSchedule: true
         };
 
-        console.log('🕸️ Neural Network Architecture Created');
+        this.setupTrainingScheduler();
+        this.setupModelVersioning();
+        this.loadLatestModel();
     }
 
-    setupMPCOptimization() {
-        // Setup MPC optimization parameters
-        this.optimizationParams = {
-            horizon: this.predictionHorizon,
-            constraints: {
-                temperature: { min: 15, max: 80 },
-                purity: { min: 99.5, max: 100 },
-                production: { min: 10, max: 100 }
-            },
-            weights: {
-                economic: 0.6,
-                safety: 0.3,
-                efficiency: 0.1
+    setupTrainingScheduler() {
+        // Schedule periodic retraining
+        this.trainingSchedule = setInterval(() => {
+            if (this.lifecycleConfig.retrainOnSchedule) {
+                this.checkRetrainingNeeded();
             }
+        }, 60 * 60 * 1000); // Check every hour
+
+        console.log('⏰ Training scheduler initialized');
+    }
+
+    setupModelVersioning() {
+        this.modelVersions = JSON.parse(localStorage.getItem('neural_mpc_model_versions') || '[]');
+        
+        // Initialize with default model if no versions exist
+        if (this.modelVersions.length === 0) {
+            this.createInitialModelVersion();
+        }
+
+        console.log(`📚 Model versioning initialized: ${this.modelVersions.length} versions`);
+    }
+
+    createInitialModelVersion() {
+        const initialModel = {
+            version: '1.0.0',
+            timestamp: new Date().toISOString(),
+            performance: {
+                accuracy: 0.75,
+                trainingLoss: 0.25,
+                validationLoss: 0.28
+            },
+            trainingData: {
+                samples: 0,
+                features: 8,
+                trainingTime: 0
+            },
+            metadata: {
+                architecture: '8-12-8-6-4',
+                activation: 'relu',
+                optimizer: 'adam'
+            },
+            modelData: this.initializeModelWeights()
         };
 
-        console.log('⚙️ MPC Optimization Parameters Set');
+        this.modelVersions.push(initialModel);
+        this.saveModelVersions();
+        this.neuralNetwork = initialModel;
     }
 
-    setupLearningSystem() {
-        // Setup reinforcement learning for MPC improvement
-        this.learningSystem = {
-            stateHistory: [],
-            actionHistory: [],
-            rewardHistory: [],
-            qValues: {},
-            learning: true,
-            explorationRate: 0.1
-        };
-
-        console.log('🎯 Reinforcement Learning System Ready');
-    }
-
-    predictOptimalSetpoint(currentState) {
-        if (!this.isEnabled) {
-            return currentState.economicSetpoint || 30;
-        }
-
-        // Use neural network to predict optimal setpoint
-        const prediction = this.neuralPrediction(currentState);
-        
-        // Apply safety constraints
-        const safePrediction = this.applySafetyConstraints(prediction, currentState);
-        
-        // Record prediction for learning
-        this.recordPrediction(currentState, safePrediction);
-        
-        return safePrediction;
-    }
-
-    neuralPrediction(state) {
-        // Simplified neural network prediction (replace with actual model)
-        const { o2Production, efficiency, stackTemperature, purity } = state;
-        
-        // Neural network computation simulation
-        let prediction = (o2Production || 30) * 0.4 + 
-                        (efficiency || 75) * 0.3 + 
-                        (100 - (stackTemperature || 25)) * 0.2 + 
-                        (purity || 99.7) * 0.1;
-        
-        // Add some intelligent adjustment based on conditions
-        if (efficiency < 70) prediction *= 0.9;
-        if (stackTemperature > 70) prediction *= 0.8;
-        if (purity < 99.7) prediction *= 0.95;
-        
-        return Math.max(10, Math.min(100, prediction));
-    }
-
-    applySafetyConstraints(prediction, state) {
-        const constraints = this.optimizationParams.constraints;
-        
-        // Temperature constraint
-        if (state.stackTemperature > constraints.temperature.max - 10) {
-            prediction = Math.min(prediction, (state.o2Production || 30) * 0.7);
-        }
-        
-        // Purity constraint
-        if (state.purity < constraints.purity.min + 0.2) {
-            prediction = Math.min(prediction, (state.o2Production || 30) * 0.8);
-        }
-        
-        // Tank level constraint
-        if (state.o2TankLevel < 20) {
-            prediction = Math.max(prediction, 40); // Ensure minimum production
-        }
-        
-        return Math.max(constraints.production.min, 
-                       Math.min(constraints.production.max, prediction));
-    }
-
-    recordPrediction(state, action) {
-        this.performanceHistory.push({
-            state: { ...state },
-            action: action,
-            timestamp: Date.now(),
-            predictionType: 'neural_mpc'
-        });
-
-        // Keep history manageable
-        if (this.performanceHistory.length > 1000) {
-            this.performanceHistory = this.performanceHistory.slice(-500);
-        }
-    }
-
-    updateLearning(state, action, reward) {
-        if (!this.learningSystem.learning) return;
-
-        // Update Q-values for reinforcement learning
-        const stateKey = this.getStateKey(state);
-        
-        if (!this.learningSystem.qValues[stateKey]) {
-            this.learningSystem.qValues[stateKey] = {};
-        }
-        
-        // Update Q-value for this state-action pair
-        const oldQValue = this.learningSystem.qValues[stateKey][action] || 0;
-        this.learningSystem.qValues[stateKey][action] = oldQValue + 
-            this.learningRate * (reward - oldQValue);
-
-        // Record learning data
-        this.learningSystem.stateHistory.push(state);
-        this.learningSystem.actionHistory.push(action);
-        this.learningSystem.rewardHistory.push(reward);
-    }
-
-    getStateKey(state) {
-        // Create a unique key for the state
-        const prod = Math.round((state.o2Production || 0) / 10);
-        const eff = Math.round((state.efficiency || 75) / 10);
-        const temp = Math.round((state.stackTemperature || 25) / 5);
-        return `${prod}_${eff}_${temp}`;
-    }
-
-    calculateReward(oldState, newState, action) {
-        // Calculate reward based on performance improvement
-        let reward = 0;
-        
-        // Economic reward (higher production, lower cost)
-        if (newState.o2Production && oldState.o2Production) {
-            reward += (newState.o2Production - oldState.o2Production) * 0.1;
-        }
-        
-        // Safety reward (maintain constraints)
-        if (newState.stackTemperature < 75 && newState.purity > 99.5) {
-            reward += 5;
-        }
-        
-        // Efficiency reward
-        if (newState.efficiency && oldState.efficiency) {
-            reward += (newState.efficiency - oldState.efficiency) * 0.05;
-        }
-        
-        // Penalty for large control changes
-        if (oldState.economicSetpoint) {
-            const change = Math.abs(action - oldState.economicSetpoint);
-            if (change > 10) reward -= 2;
-        }
-        
-        return reward;
-    }
-
-    enableNeuralMPC() {
-        this.isEnabled = true;
-        console.log('🧠 Neural MPC Enabled');
-        
-        if (window.electrolyzerApp) {
-            window.electrolyzerApp.showNotification('Neural MPC Enabled', 'success');
-        }
-    }
-
-    disableNeuralMPC() {
-        this.isEnabled = false;
-        console.log('🧠 Neural MPC Disabled');
-        
-        if (window.electrolyzerApp) {
-            window.electrolyzerApp.showNotification('Neural MPC Disabled', 'warning');
-        }
-    }
-
-    optimizeParameters() {
-        console.log('🔧 Optimizing Neural MPC parameters...');
-        
-        // Parameter optimization logic
-        const optimizationResult = this.runParameterOptimization();
-        
-        // Update learning rate based on performance
-        const performance = this.getPerformanceMetrics();
-        if (performance.predictionAccuracy > 80) {
-            this.learningRate = Math.min(0.05, this.learningRate * 1.1);
-        } else {
-            this.learningRate = Math.max(0.001, this.learningRate * 0.9);
-        }
-        
-        console.log('✅ Parameter optimization completed');
-        return optimizationResult;
-    }
-
-    runParameterOptimization() {
-        // Run parameter optimization using historical data
-        const bestParams = {
-            learningRate: this.learningRate,
-            predictionHorizon: this.predictionHorizon,
-            explorationRate: this.learningSystem.explorationRate,
-            optimizationTimestamp: Date.now()
-        };
-        
-        return bestParams;
-    }
-
-    getPerformanceMetrics() {
+    initializeModelWeights() {
+        // Initialize random weights for the neural network
         return {
-            predictionAccuracy: this.calculatePredictionAccuracy(),
-            optimizationImprovement: this.calculateOptimizationImprovement(),
-            learningProgress: this.calculateLearningProgress(),
-            constraintSatisfaction: this.calculateConstraintSatisfaction(),
-            neuralNetworkStatus: this.neuralNetwork.trained ? 'Trained' : 'Untrained',
-            learningRate: this.learningRate,
-            isEnabled: this.isEnabled
+            weights: this.generateRandomWeights(),
+            biases: this.generateRandomBiases(),
+            trained: false,
+            trainingEpochs: 0
         };
     }
 
-    calculatePredictionAccuracy() {
-        if (this.performanceHistory.length < 2) return 0;
+    generateRandomWeights() {
+        // Generate random weights for neural network layers
+        const layers = [8, 12, 8, 6, 4]; // Input to output layer sizes
+        const weights = [];
         
-        const recent = this.performanceHistory.slice(-20);
-        let accuracy = 0;
-        let count = 0;
+        for (let i = 0; i < layers.length - 1; i++) {
+            const layerWeights = [];
+            for (let j = 0; j < layers[i]; j++) {
+                const neuronWeights = [];
+                for (let k = 0; k < layers[i + 1]; k++) {
+                    neuronWeights.push((Math.random() - 0.5) * 2); // Random between -1 and 1
+                }
+                layerWeights.push(neuronWeights);
+            }
+            weights.push(layerWeights);
+        }
         
-        for (let i = 1; i < recent.length; i++) {
-            const prev = recent[i-1];
-            const current = recent[i];
-            
-            if (prev.state.o2Production && current.state.o2Production) {
-                const predictedChange = current.action - prev.action;
-                const actualChange = current.state.o2Production - prev.state.o2Production;
-                const error = Math.abs(predictedChange - actualChange);
-                accuracy += (1 - error / 100);
-                count++;
+        return weights;
+    }
+
+    generateRandomBiases() {
+        // Generate random biases for each layer
+        const layers = [12, 8, 6, 4]; // Hidden and output layers
+        const biases = [];
+        
+        for (let i = 0; i < layers.length; i++) {
+            const layerBiases = [];
+            for (let j = 0; j < layers[i]; j++) {
+                layerBiases.push((Math.random() - 0.5) * 0.1); // Small random biases
+            }
+            biases.push(layerBiases);
+        }
+        
+        return biases;
+    }
+
+    // 🎯 LIFECYCLE MANAGEMENT METHODS
+
+    checkRetrainingNeeded() {
+        const metrics = this.getPerformanceMetrics();
+        const currentVersion = this.getCurrentModelVersion();
+        
+        const retrainingReasons = [];
+        
+        // Check performance decay
+        if (this.lifecycleConfig.retrainOnPerformanceDrop) {
+            const performanceDrop = this.calculatePerformanceDrop(currentVersion, metrics);
+            if (performanceDrop > this.lifecycleConfig.performanceDecayThreshold) {
+                retrainingReasons.push(`Performance drop: ${(performanceDrop * 100).toFixed(1)}%`);
             }
         }
         
-        return count > 0 ? (accuracy / count) * 100 : 0;
-    }
-
-    calculateOptimizationImprovement() {
-        // Calculate improvement over baseline MPC
-        const baselinePerformance = 75; // Standard MPC baseline
-        const currentPerformance = this.calculatePredictionAccuracy();
-        
-        return Math.max(0, ((currentPerformance - baselinePerformance) / baselinePerformance) * 100);
-    }
-
-    calculateLearningProgress() {
-        if (Object.keys(this.learningSystem.qValues).length === 0) return 0;
-        
-        // Calculate learning progress based on Q-value convergence
-        const stateCount = Object.keys(this.learningSystem.qValues).length;
-        const progress = Math.min(100, (stateCount / 50) * 100);
-        
-        return progress;
-    }
-
-    calculateConstraintSatisfaction() {
-        if (this.performanceHistory.length === 0) return 100;
-        
-        const recent = this.performanceHistory.slice(-50);
-        let satisfied = 0;
-        
-        recent.forEach(entry => {
-            if (entry.state.stackTemperature < 80 && 
-                entry.state.purity > 99.5 &&
-                entry.state.o2TankLevel > 10) {
-                satisfied++;
+        // Check data drift
+        if (this.lifecycleConfig.retrainOnDataDrift) {
+            const dataDrift = this.calculateDataDrift();
+            if (dataDrift > this.lifecycleConfig.dataDriftThreshold) {
+                retrainingReasons.push(`Data drift: ${(dataDrift * 100).toFixed(1)}%`);
             }
+        }
+        
+        // Check schedule
+        if (this.lifecycleConfig.retrainOnSchedule) {
+            const timeSinceLastTrain = Date.now() - new Date(currentVersion.timestamp).getTime();
+            if (timeSinceLastTrain > this.lifecycleConfig.retrainInterval) {
+                retrainingReasons.push('Scheduled retraining');
+            }
+        }
+        
+        // Check minimum samples
+        if (this.performanceHistory.length >= this.lifecycleConfig.minTrainingSamples) {
+            retrainingReasons.push('Sufficient training data available');
+        }
+        
+        if (retrainingReasons.length > 0 && this.lifecycleConfig.autoRetrain) {
+            console.log('🔄 Retraining triggered:', retrainingReasons);
+            this.retrainModel(retrainingReasons);
+        }
+        
+        return retrainingReasons;
+    }
+
+    calculatePerformanceDrop(modelVersion, currentMetrics) {
+        const originalAccuracy = modelVersion.performance.accuracy;
+        const currentAccuracy = currentMetrics.predictionAccuracy / 100; // Convert to 0-1 scale
+        
+        return Math.max(0, originalAccuracy - currentAccuracy);
+    }
+
+    calculateDataDrift() {
+        if (this.performanceHistory.length < 100) return 0;
+        
+        // Calculate statistical drift in feature distributions
+        const recentData = this.performanceHistory.slice(-100);
+        const oldData = this.performanceHistory.slice(-200, -100);
+        
+        // Simple drift detection based on feature means
+        let totalDrift = 0;
+        const features = ['o2Production', 'efficiency', 'stackTemperature', 'purity'];
+        
+        features.forEach(feature => {
+            const recentMean = this.calculateMean(recentData, feature);
+            const oldMean = this.calculateMean(oldData, feature);
+            const drift = Math.abs(recentMean - oldMean) / (oldMean || 1);
+            totalDrift += drift;
         });
         
-        return (satisfied / recent.length) * 100;
+        return totalDrift / features.length;
     }
 
-    exportLearningData() {
-        // Export learning data for analysis
-        const exportData = {
-            neuralNetwork: this.neuralNetwork,
-            learningSystem: {
-                qValues: this.learningSystem.qValues,
-                explorationRate: this.learningSystem.explorationRate
-            },
-            performanceHistory: this.performanceHistory.slice(-100),
-            optimizationParams: this.optimizationParams,
-            performanceMetrics: this.getPerformanceMetrics(),
-            exportTimestamp: new Date().toISOString()
-        };
+    calculateMean(data, feature) {
+        const values = data.map(d => d.state[feature]).filter(v => v !== undefined);
+        return values.reduce((sum, val) => sum + val, 0) / values.length;
+    }
+
+    async retrainModel(reasons = []) {
+        console.log('🎯 Starting model retraining...');
         
-        return JSON.stringify(exportData, null, 2);
-    }
-
-    importLearningData(data) {
+        if (this.performanceHistory.length < this.lifecycleConfig.minTrainingSamples) {
+            console.warn('⚠️ Insufficient training data for retraining');
+            return false;
+        }
+        
         try {
-            const importData = JSON.parse(data);
-            
-            this.neuralNetwork = importData.neuralNetwork || this.neuralNetwork;
-            this.learningSystem.qValues = importData.learningSystem?.qValues || this.learningSystem.qValues;
-            this.performanceHistory = importData.performanceHistory || this.performanceHistory;
-            this.optimizationParams = importData.optimizationParams || this.optimizationParams;
-            
-            console.log('📥 Neural MPC learning data imported');
-            
+            // Show training notification
             if (window.electrolyzerApp) {
-                window.electrolyzerApp.showNotification('Neural MPC data imported successfully', 'success');
+                window.electrolyzerApp.showNotification('Neural MPC retraining started...', 'info');
             }
             
-            return true;
+            // Prepare training data
+            const trainingData = this.prepareTrainingData();
+            
+            // Train the model
+            const trainingResult = await this.trainModel(trainingData);
+            
+            // Create new model version
+            const newVersion = this.createNewModelVersion(trainingResult, reasons);
+            
+            // Validate new model
+            const validationResult = this.validateModel(newVersion);
+            
+            if (validationResult.isBetter) {
+                // Deploy new model
+                this.deployModel(newVersion);
+                
+                console.log('✅ Model retraining completed successfully');
+                
+                if (window.electrolyzerApp) {
+                    window.electrolyzerApp.showNotification(
+                        `Neural MPC updated to v${newVersion.version}`, 
+                        'success'
+                    );
+                }
+                
+                return true;
+            } else {
+                console.warn('⚠️ New model performance worse than current - keeping existing model');
+                return false;
+            }
+            
         } catch (error) {
-            console.error('❌ Error importing learning data:', error);
+            console.error('❌ Model retraining failed:', error);
             
             if (window.electrolyzerApp) {
-                window.electrolyzerApp.showNotification('Error importing Neural MPC data', 'danger');
+                window.electrolyzerApp.showNotification('Model retraining failed', 'danger');
             }
             
             return false;
         }
     }
 
-    resetLearning() {
-        this.learningSystem = {
-            stateHistory: [],
-            actionHistory: [],
-            rewardHistory: [],
-            qValues: {},
-            learning: true,
-            explorationRate: 0.1
-        };
+    prepareTrainingData() {
+        // Prepare data for training
+        const features = [];
+        const labels = [];
         
-        this.performanceHistory = [];
-        this.learningRate = 0.01;
-        
-        console.log('🔄 Neural MPC learning reset');
-        
-        if (window.electrolyzerApp) {
-            window.electrolyzerApp.showNotification('Neural MPC learning reset', 'info');
-        }
-    }
-
-    // Method to get current status
-    getStatus() {
-        return {
-            isEnabled: this.isEnabled,
-            performanceMetrics: this.getPerformanceMetrics(),
-            learningRate: this.learningRate,
-            predictionHorizon: this.predictionHorizon,
-            historySize: this.performanceHistory.length
-        };
-    }
-}
-
-// Neural MPC Visualization
-class NeuralMPCVisualization {
-    constructor() {
-        this.networkCanvas = null;
-        this.performanceCanvas = null;
-        this.init();
-    }
-
-    init() {
-        this.setupNetworkVisualization();
-        this.setupPerformanceVisualization();
-        console.log('🎨 Neural MPC Visualization Initialized');
-    }
-
-    setupNetworkVisualization() {
-        const canvas = document.getElementById('neuralNetworkCanvas');
-        if (!canvas) {
-            console.log('⚠️ Neural network canvas not found');
-            return;
-        }
-        
-        this.networkCanvas = canvas.getContext('2d');
-        this.drawNeuralNetwork();
-    }
-
-    setupPerformanceVisualization() {
-        const canvas = document.getElementById('learningPerformanceCanvas');
-        if (!canvas) {
-            console.log('⚠️ Learning performance canvas not found');
-            return;
-        }
-        
-        this.performanceCanvas = canvas.getContext('2d');
-        this.drawLearningPerformance();
-    }
-
-    drawNeuralNetwork() {
-        if (!this.networkCanvas) return;
-        
-        const ctx = this.networkCanvas;
-        const width = ctx.canvas.width;
-        const height = ctx.canvas.height;
-        
-        // Clear canvas
-        ctx.clearRect(0, 0, width, height);
-        
-        // Draw neural network architecture
-        this.drawNetworkLayers(ctx, width, height);
-        this.drawNeurons(ctx, width, height);
-        this.drawConnections(ctx, width, height);
-    }
-
-    drawNetworkLayers(ctx, width, height) {
-        const layers = 4;
-        const layerWidth = width / (layers + 1);
-        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-        
-        for (let i = 1; i <= layers; i++) {
-            const x = layerWidth * i;
+        this.performanceHistory.forEach(entry => {
+            const feature = this.extractFeatures(entry.state);
+            const label = this.extractLabel(entry);
             
-            // Draw layer background
-            ctx.fillStyle = 'rgba(30, 41, 59, 0.5)';
-            ctx.fillRect(x - 40, 20, 80, height - 40);
-            
-            // Draw layer label
-            ctx.fillStyle = '#f1f5f9';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`Layer ${i}`, x, height - 10);
-        }
-    }
-
-    drawNeurons(ctx, width, height) {
-        const layers = 4;
-        const neuronsPerLayer = [4, 8, 8, 2];
-        const layerWidth = width / (layers + 1);
-        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-        
-        for (let layer = 0; layer < layers; layer++) {
-            const x = layerWidth * (layer + 1);
-            const neurons = neuronsPerLayer[layer];
-            const neuronSpacing = (height - 60) / (neurons - 1);
-            
-            for (let neuron = 0; neuron < neurons; neuron++) {
-                const y = 30 + neuron * neuronSpacing;
-                
-                // Draw neuron
-                ctx.beginPath();
-                ctx.arc(x, y, 8, 0, 2 * Math.PI);
-                ctx.fillStyle = colors[layer];
-                ctx.fill();
-                ctx.strokeStyle = '#1e293b';
-                ctx.lineWidth = 1;
-                ctx.stroke();
+            if (feature && label) {
+                features.push(feature);
+                labels.push(label);
             }
-        }
-    }
-
-    drawConnections(ctx, width, height) {
-        // Draw connections between neurons
-        ctx.strokeStyle = 'rgba(100, 116, 139, 0.3)';
-        ctx.lineWidth = 1;
-        
-        // Simplified connection drawing
-        const layers = 4;
-        const layerWidth = width / (layers + 1);
-        
-        for (let layer = 0; layer < layers - 1; layer++) {
-            const startX = layerWidth * (layer + 1);
-            const endX = layerWidth * (layer + 2);
-            
-            // Draw sample connections
-            for (let i = 0; i < 3; i++) {
-                const startY = 30 + i * 50;
-                const endY = 30 + (i * 50 + 20);
-                
-                ctx.beginPath();
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(endX, endY);
-                ctx.stroke();
-            }
-        }
-    }
-
-    drawLearningPerformance() {
-        if (!this.performanceCanvas) return;
-        
-        const ctx = this.performanceCanvas;
-        const width = ctx.canvas.width;
-        const height = ctx.canvas.height;
-        
-        // Clear canvas
-        ctx.clearRect(0, 0, width, height);
-        
-        // Draw performance chart
-        this.drawPerformanceChart(ctx, width, height);
-    }
-
-    drawPerformanceChart(ctx, width, height) {
-        if (!window.neuralMPCManager) return;
-        
-        const metrics = window.neuralMPCManager.getPerformanceMetrics();
-        
-        const data = [
-            metrics.predictionAccuracy,
-            metrics.optimizationImprovement, 
-            metrics.learningProgress,
-            metrics.constraintSatisfaction
-        ];
-        
-        const labels = ['Accuracy', 'Improvement', 'Learning', 'Safety'];
-        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-        
-        const barWidth = width / (data.length + 1);
-        const maxValue = Math.max(...data, 100);
-        
-        // Draw bars
-        data.forEach((value, index) => {
-            const barHeight = (value / maxValue) * (height - 60);
-            const x = barWidth * (index + 0.5);
-            const y = height - 30 - barHeight;
-            
-            ctx.fillStyle = colors[index];
-            ctx.fillRect(x - barWidth/3, y, barWidth * 2/3, barHeight);
-            
-            // Draw value label
-            ctx.fillStyle = '#f1f5f9';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${Math.round(value)}%`, x, y - 5);
-            
-            // Draw metric label
-            ctx.fillText(labels[index], x, height - 10);
         });
         
-        // Draw chart title
-        ctx.fillStyle = '#f1f5f9';
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Neural MPC Performance Metrics', width/2, 20);
+        return {
+            features: features,
+            labels: labels,
+            size: features.length,
+            timestamp: new Date().toISOString()
+        };
     }
 
-    updateVisualizations() {
-        this.drawNeuralNetwork();
-        this.drawLearningPerformance();
+    extractFeatures(state) {
+        return [
+            state.o2Production || 0,
+            state.efficiency || 75,
+            state.stackTemperature || 25,
+            state.purity || 99.7,
+            state.o2TankLevel || 50,
+            state.safetyMargin || 100,
+            state.economicSetpoint || 30,
+            Date.now() % 24 // Time of day feature
+        ];
+    }
+
+    extractLabel(entry) {
+        // Use actual production as label for supervised learning
+        return entry.state.o2Production || 30;
+    }
+
+    async trainModel(trainingData) {
+        // Simulate training process (in real implementation, use TensorFlow.js or similar)
+        console.log(`🧪 Training model with ${trainingData.size} samples...`);
+        
+        // Simulate training time
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        const trainingLoss = 0.1 + Math.random() * 0.1;
+        const validationLoss = trainingLoss + 0.05;
+        
+        return {
+            trainingLoss: trainingLoss,
+            validationLoss: validationLoss,
+            accuracy: 1 - validationLoss,
+            trainingTime: 2000,
+            epochs: 50
+        };
+    }
+
+    createNewModelVersion(trainingResult, reasons) {
+        const currentVersion = this.getCurrentModelVersion();
+        const newVersionNumber = this.incrementVersion(currentVersion.version);
+        
+        const newVersion = {
+            version: newVersionNumber,
+            timestamp: new Date().toISOString(),
+            performance: {
+                accuracy: trainingResult.accuracy,
+                trainingLoss: trainingResult.trainingLoss,
+                validationLoss: trainingResult.validationLoss
+            },
+            trainingData: {
+                samples: this.performanceHistory.length,
+                features: 8,
+                trainingTime: trainingResult.trainingTime
+            },
+            metadata: {
+                architecture: '8-12-8-6-4',
+                activation: 'relu',
+                optimizer: 'adam',
+                retrainingReasons: reasons
+            },
+            modelData: {
+                ...this.neuralNetwork.modelData,
+                trained: true,
+                trainingEpochs: trainingResult.epochs,
+                lastTraining: new Date().toISOString()
+            }
+        };
+        
+        return newVersion;
+    }
+
+    incrementVersion(currentVersion) {
+        const [major, minor, patch] = currentVersion.split('.').map(Number);
+        return `${major}.${minor}.${patch + 1}`;
+    }
+
+    validateModel(newVersion) {
+        const currentVersion = this.getCurrentModelVersion();
+        
+        // Simple validation: new model must be at least as good as current
+        const improvement = newVersion.performance.accuracy - currentVersion.performance.accuracy;
+        const isBetter = improvement >= -0.02; // Allow small degradation
+        
+        return {
+            isBetter: isBetter,
+            improvement: improvement,
+            currentAccuracy: currentVersion.performance.accuracy,
+            newAccuracy: newVersion.performance.accuracy
+        };
+    }
+
+    deployModel(newVersion) {
+        // Add to version history
+        this.modelVersions.push(newVersion);
+        
+        // Clean up old versions if needed
+        if (this.lifecycleConfig.versionAutoCleanup && 
+            this.modelVersions.length > this.lifecycleConfig.maxModelVersions) {
+            this.modelVersions = this.modelVersions.slice(-this.lifecycleConfig.maxModelVersions);
+        }
+        
+        // Set as current model
+        this.neuralNetwork = newVersion;
+        
+        // Save to storage
+        this.saveModelVersions();
+        
+        console.log(`🚀 Deployed model v${newVersion.version}`);
+    }
+
+    loadLatestModel() {
+        if (this.modelVersions.length > 0) {
+            this.neuralNetwork = this.modelVersions[this.modelVersions.length - 1];
+            console.log(`📥 Loaded model v${this.neuralNetwork.version}`);
+        }
+    }
+
+    getCurrentModelVersion() {
+        return this.neuralNetwork;
+    }
+
+    getModelHistory() {
+        return this.modelVersions.map(version => ({
+            version: version.version,
+            timestamp: version.timestamp,
+            accuracy: version.performance.accuracy,
+            trainingSamples: version.trainingData.samples
+        }));
+    }
+
+    rollbackModel(versionNumber) {
+        const targetVersion = this.modelVersions.find(v => v.version === versionNumber);
+        if (targetVersion) {
+            this.neuralNetwork = targetVersion;
+            this.saveModelVersions();
+            console.log(`↩️ Rolled back to model v${versionNumber}`);
+            
+            if (window.electrolyzerApp) {
+                window.electrolyzerApp.showNotification(`Rolled back to v${versionNumber}`, 'warning');
+            }
+            
+            return true;
+        }
+        return false;
+    }
+
+    saveModelVersions() {
+        localStorage.setItem('neural_mpc_model_versions', JSON.stringify(this.modelVersions));
+    }
+
+    exportModel(versionNumber = null) {
+        const model = versionNumber ? 
+            this.modelVersions.find(v => v.version === versionNumber) : 
+            this.neuralNetwork;
+            
+        if (model) {
+            const exportData = {
+                model: model,
+                exportInfo: {
+                    timestamp: new Date().toISOString(),
+                    totalVersions: this.modelVersions.length,
+                    performanceHistory: this.performanceHistory.length
+                }
+            };
+            
+            return JSON.stringify(exportData, null, 2);
+        }
+        return null;
+    }
+
+    importModel(modelData) {
+        try {
+            const importData = JSON.parse(modelData);
+            const newVersion = importData.model;
+            
+            // Validate imported model
+            if (!newVersion.version || !newVersion.modelData) {
+                throw new Error('Invalid model format');
+            }
+            
+            // Add to versions
+            this.modelVersions.push(newVersion);
+            this.neuralNetwork = newVersion;
+            this.saveModelVersions();
+            
+            console.log(`📥 Imported model v${newVersion.version}`);
+            
+            if (window.electrolyzerApp) {
+                window.electrolyzerApp.showNotification(`Model v${newVersion.version} imported`, 'success');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Model import failed:', error);
+            return false;
+        }
+    }
+
+    getLifecycleStatus() {
+        const currentModel = this.getCurrentModelVersion();
+        const metrics = this.getPerformanceMetrics();
+        
+        return {
+            currentModel: {
+                version: currentModel.version,
+                accuracy: currentModel.performance.accuracy,
+                trainingDate: currentModel.timestamp,
+                samplesTrained: currentModel.trainingData.samples
+            },
+            lifecycle: {
+                autoRetrain: this.lifecycleConfig.autoRetrain,
+                retrainInterval: this.lifecycleConfig.retrainInterval,
+                performanceThreshold: this.retrainingThreshold,
+                dataDrift: this.calculateDataDrift(),
+                performanceDrop: this.calculatePerformanceDrop(currentModel, metrics)
+            },
+            trainingData: {
+                totalSamples: this.performanceHistory.length,
+                minRequired: this.lifecycleConfig.minTrainingSamples,
+                sufficientData: this.performanceHistory.length >= this.lifecycleConfig.minTrainingSamples
+            },
+            modelHistory: {
+                totalVersions: this.modelVersions.length,
+                versions: this.getModelHistory()
+            }
+        };
+    }
+
+    // 🛠️ UTILITY METHODS
+
+    cleanup() {
+        if (this.trainingSchedule) {
+            clearInterval(this.trainingSchedule);
+        }
+        
+        // Clean up performance history if too large
+        if (this.performanceHistory.length > 10000) {
+            this.performanceHistory = this.performanceHistory.slice(-5000);
+        }
+        
+        console.log('🧹 Neural MPC lifecycle cleanup completed');
+    }
+
+    resetLifecycle() {
+        this.performanceHistory = [];
+        this.modelVersions = [];
+        this.createInitialModelVersion();
+        
+        console.log('🔄 Neural MPC lifecycle reset');
+        
+        if (window.electrolyzerApp) {
+            window.electrolyzerApp.showNotification('Neural MPC lifecycle reset', 'info');
+        }
     }
 }
 
-// Initialize Neural MPC system
+// Enhanced initialization with lifecycle management
 document.addEventListener('DOMContentLoaded', () => {
     window.neuralMPCManager = new NeuralMPCManager();
     window.neuralMPCVisualization = new NeuralMPCVisualization();
-    console.log('🧠 Neural MPC System Fully Initialized');
+    
+    console.log('🧠 Neural MPC with Lifecycle Management Fully Initialized');
+    
+    // Setup periodic lifecycle checks
+    setInterval(() => {
+        if (window.neuralMPCManager) {
+            window.neuralMPCManager.checkRetrainingNeeded();
+        }
+    }, 30 * 60 * 1000); // Check every 30 minutes
 });
