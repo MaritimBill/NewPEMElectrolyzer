@@ -1,415 +1,409 @@
-/* components.css - Professional Component Styles for PEM Electrolyzer */
-
-/* ===== NOTIFICATION SYSTEM ===== */
-.notification-container {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1000;
-    max-width: 400px;
-}
-
-.notification {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: 0.5rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    animation: slideIn 0.3s ease forwards;
-    backdrop-filter: blur(10px);
-}
-
-.notification.info {
-    border-left: 4px solid var(--accent-info);
-}
-
-.notification.success {
-    border-left: 4px solid var(--accent-success);
-}
-
-.notification.warning {
-    border-left: 4px solid var(--accent-warning);
-}
-
-.notification.error {
-    border-left: 4px solid var(--accent-danger);
-}
-
-.notification-content {
-    display: flex;
-    justify-content: between;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.notification-message {
-    flex: 1;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-
-.notification-close {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 1.2rem;
-    padding: 0;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-}
-
-.notification-close:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-}
-
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
+// app.js - Main Application Controller for PEM Electrolyzer
+class ElectrolyzerApp {
+    constructor() {
+        this.mqttClient = null;
+        this.currentData = null;
+        this.history = [];
+        this.isConnected = false;
+        this.chartManager = null;
+        this.dataUpdateInterval = null;
+        this.simulationMode = true;
+        this.connectionStatus = {
+            mqtt: false,
+            simulink: false,
+            plc: false
+        };
+        
+        this.defaultValues = {
+            o2Production: 45,
+            efficiency: 78,
+            stackTemperature: 65,
+            safetyMargin: 95,
+            powerConsumption: 150,
+            voltage: 2.1,
+            current: 150,
+            pressure: 35,
+            purity: 99.8
+        };
+        
+        this.init();
     }
-    to {
-        transform: translateX(0);
-        opacity: 1;
+
+    init() {
+        console.log('HE-NMPC Electrolyzer Controller Initializing...');
+        
+        // Initialize components in sequence
+        this.initChartManager();
+        this.initEventListeners();
+        this.updateSystemStatus();
+        this.startDataUpdates();
+        
+        // Try to connect to MQTT, fallback to simulation
+        this.connectMQTT().catch(error => {
+            console.warn('MQTT connection failed, running in simulation mode:', error);
+            this.simulationMode = true;
+            this.updateConnectionStatus('mqtt', false);
+        });
+        
+        console.log('HE-NMPC Electrolyzer Controller Initialized - Simulation Mode:', this.simulationMode);
+    }
+
+    initChartManager() {
+        this.chartManager = new ChartManager();
+        console.log('Chart Manager Initialized');
+    }
+
+    initEventListeners() {
+        // Window resize handling
+        window.addEventListener('resize', () => {
+            if (this.chartManager) {
+                setTimeout(() => this.chartManager.resizeCharts(), 100);
+            }
+        });
+
+        // System control buttons
+        const controlButtons = document.querySelectorAll('.control-btn');
+        controlButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.handleControlAction(e.target.dataset.action);
+            });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 'r':
+                        e.preventDefault();
+                        this.refreshData();
+                        break;
+                    case 'd':
+                        e.preventDefault();
+                        this.toggleDashboard();
+                        break;
+                }
+            }
+        });
+
+        console.log('Event listeners initialized');
+    }
+
+    connectMQTT() {
+        return new Promise((resolve, reject) => {
+            // MQTT connection configuration
+            const host = 'ws://localhost:9001';
+            const clientId = 'electrolyzer_ui_' + Math.random().toString(16).substr(2, 8);
+            
+            try {
+                this.mqttClient = new Paho.MQTT.Client(host, clientId);
+                
+                this.mqttClient.onConnectionLost = (response) => {
+                    console.error('MQTT Connection lost:', response.errorMessage);
+                    this.updateConnectionStatus('mqtt', false);
+                    this.simulationMode = true;
+                };
+                
+                this.mqttClient.onMessageArrived = (message) => {
+                    this.handleMessage(message.destinationName, message.payloadString);
+                };
+                
+                const connectOptions = {
+                    timeout: 3,
+                    onSuccess: () => {
+                        console.log('MQTT Connected successfully');
+                        this.isConnected = true;
+                        this.simulationMode = false;
+                        this.updateConnectionStatus('mqtt', true);
+                        
+                        // Subscribe to topics
+                        this.mqttClient.subscribe('electrolyzer/+/data');
+                        this.mqttClient.subscribe('electrolyzer/status');
+                        this.mqttClient.subscribe('electrolyzer/alerts');
+                        
+                        resolve();
+                    },
+                    onFailure: (error) => {
+                        console.error('MQTT Connection failed:', error);
+                        this.updateConnectionStatus('mqtt', false);
+                        reject(error);
+                    }
+                };
+                
+                this.mqttClient.connect(connectOptions);
+                
+            } catch (error) {
+                console.error('MQTT initialization error:', error);
+                reject(error);
+            }
+        });
+    }
+
+    startDataUpdates() {
+        // Clear any existing interval
+        if (this.dataUpdateInterval) {
+            clearInterval(this.dataUpdateInterval);
+        }
+
+        // Start data simulation/update interval
+        this.dataUpdateInterval = setInterval(() => {
+            if (this.simulationMode && !this.isConnected) {
+                this.simulateLiveData();
+            }
+        }, 2000); // Update every 2 seconds
+
+        // Update time display every second
+        setInterval(() => {
+            this.updateTimeDisplay();
+        }, 1000);
+    }
+
+    simulateLiveData() {
+        const baseValues = { ...this.defaultValues };
+        
+        // Add realistic variations
+        const simulatedData = {
+            o2Production: Math.max(0, baseValues.o2Production + (Math.random() - 0.5) * 4),
+            efficiency: Math.max(0, Math.min(100, baseValues.efficiency + (Math.random() - 0.5) * 2)),
+            stackTemperature: Math.max(20, baseValues.stackTemperature + (Math.random() - 0.5) * 3),
+            safetyMargin: Math.max(0, Math.min(100, baseValues.safetyMargin + (Math.random() - 0.5) * 1)),
+            powerConsumption: Math.max(0, baseValues.powerConsumption + (Math.random() - 0.5) * 10),
+            voltage: Math.max(0, baseValues.voltage + (Math.random() - 0.5) * 0.1),
+            current: Math.max(0, baseValues.current + (Math.random() - 0.5) * 5),
+            pressure: Math.max(0, baseValues.pressure + (Math.random() - 0.5) * 2),
+            purity: Math.max(98, Math.min(100, baseValues.purity + (Math.random() - 0.5) * 0.1)),
+            h2Production: (baseValues.o2Production * 2) + (Math.random() - 0.5) * 8,
+            timestamp: new Date().toISOString(),
+            source: 'simulation'
+        };
+
+        this.handleMessage('electrolyzer/simulation/data', JSON.stringify(simulatedData));
+    }
+
+    handleMessage(topic, message) {
+        try {
+            const data = JSON.parse(message);
+            this.currentData = data;
+            
+            // Add timestamp if not present
+            if (!data.timestamp) {
+                data.timestamp = new Date().toISOString();
+            }
+            
+            this.history.push({...data, timestamp: Date.now()});
+            
+            // Keep history manageable for performance
+            if (this.history.length > 1000) {
+                this.history = this.history.slice(-1000);
+            }
+            
+            this.updateDashboard(data);
+            this.updateCharts(data);
+            this.updateLiveDataFeed(data);
+            this.updateSystemMetrics(data);
+            
+        } catch (error) {
+            console.error('Error processing message:', error);
+        }
+    }
+
+    updateDashboard(data) {
+        this.updateMetricValue('productionValue', data.o2Production, '%');
+        this.updateMetricValue('efficiencyValue', data.efficiency, '%');
+        this.updateMetricValue('safetyValue', data.safetyMargin, '%');
+        this.updateMetricValue('temperatureValue', data.stackTemperature, '°C');
+    }
+
+    updateMetricValue(elementId, value, suffix = '') {
+        const element = document.getElementById(elementId);
+        if (element && value !== undefined && value !== null) {
+            element.textContent = value.toFixed(1) + suffix;
+            
+            // Add animation effect
+            element.style.transform = 'scale(1.05)';
+            setTimeout(() => {
+                element.style.transform = 'scale(1)';
+            }, 200);
+        }
+    }
+
+    updateLiveDataFeed(data) {
+        this.updateLiveValue('liveO2Production', data.o2Production, '%');
+        this.updateLiveValue('liveEfficiency', data.efficiency, '%');
+        this.updateLiveValue('liveTemperature', data.stackTemperature, '°C');
+        this.updateLiveValue('livePower', data.powerConsumption, 'kW');
+    }
+
+    updateLiveValue(elementId, value, suffix = '') {
+        const element = document.getElementById(elementId);
+        if (element && value !== undefined && value !== null) {
+            const formattedValue = typeof value === 'number' ? value.toFixed(1) : value;
+            element.textContent = formattedValue + suffix;
+        }
+    }
+
+    updateSystemMetrics(data) {
+        // Update system status badges
+        this.updateStatusBadge('controllerMode', 'HE-NMPC', 'success');
+        this.updateStatusBadge('operationMode', this.simulationMode ? 'SIMULATION' : 'AUTO', 'info');
+        this.updateStatusBadge('safetyViolations', '0', 'success');
+        this.updateStatusBadge('simulinkStatus', this.connectionStatus.simulink ? 'Connected' : 'Disconnected', 
+                              this.connectionStatus.simulink ? 'success' : 'warning');
+    }
+
+    updateStatusBadge(elementId, text, type) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = text;
+            element.className = `status-badge ${type}`;
+        }
+    }
+
+    updateCharts(data) {
+        if (this.chartManager) {
+            this.chartManager.updateCharts(data);
+        }
+    }
+
+    updateConnectionStatus(component, connected) {
+        this.connectionStatus[component] = connected;
+        
+        const statusElement = document.getElementById('connectionStatus');
+        const textElement = document.getElementById('connectionText');
+        
+        if (statusElement && textElement) {
+            if (connected) {
+                statusElement.className = 'status-dot connected';
+                textElement.textContent = 'Connected';
+            } else {
+                statusElement.className = 'status-dot disconnected';
+                textElement.textContent = this.simulationMode ? 'Simulation Mode' : 'Disconnected';
+            }
+        }
+    }
+
+    updateSystemStatus() {
+        const systemStatusElement = document.getElementById('systemStatus');
+        if (systemStatusElement) {
+            systemStatusElement.textContent = this.simulationMode ? 
+                'System Ready (Simulation)' : 'System Ready (Live)';
+        }
+    }
+
+    updateTimeDisplay() {
+        const timeElement = document.getElementById('currentTime');
+        if (timeElement) {
+            const now = new Date();
+            timeElement.textContent = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+    }
+
+    handleControlAction(action) {
+        console.log('Control action triggered:', action);
+        
+        switch(action) {
+            case 'start':
+                this.showNotification('Starting electrolyzer system...', 'info');
+                break;
+            case 'stop':
+                this.showNotification('Stopping electrolyzer system...', 'warning');
+                break;
+            case 'reset':
+                this.showNotification('Resetting system parameters...', 'info');
+                break;
+            case 'emergency':
+                this.showNotification('EMERGENCY STOP ACTIVATED!', 'error');
+                break;
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-message">${message}</span>
+                <button class="notification-close">&times;</button>
+            </div>
+        `;
+        
+        // Add to notification container or create one
+        let container = document.getElementById('notification-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'notification-container';
+            container.className = 'notification-container';
+            document.body.appendChild(container);
+        }
+        
+        container.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.animation = 'slideOut 0.3s ease forwards';
+                setTimeout(() => notification.remove(), 300);
+            }
+        }, 5000);
+        
+        // Close button handler
+        notification.querySelector('.notification-close').addEventListener('click', () => {
+            notification.remove();
+        });
+    }
+
+    refreshData() {
+        console.log('Manual data refresh triggered');
+        if (this.simulationMode) {
+            this.simulateLiveData();
+        }
+        this.showNotification('Data refreshed', 'info');
+    }
+
+    toggleDashboard() {
+        // Toggle between different dashboard views
+        console.log('Dashboard view toggled');
+    }
+
+    // Public method to get current system state
+    getSystemState() {
+        return {
+            connected: this.isConnected,
+            simulationMode: this.simulationMode,
+            currentData: this.currentData,
+            connectionStatus: this.connectionStatus,
+            historyLength: this.history.length
+        };
+    }
+
+    // Cleanup method
+    destroy() {
+        if (this.dataUpdateInterval) {
+            clearInterval(this.dataUpdateInterval);
+        }
+        if (this.mqttClient && this.isConnected) {
+            this.mqttClient.disconnect();
+        }
+        if (this.chartManager) {
+            this.chartManager.destroyAllCharts();
+        }
+        console.log('Electrolyzer app cleaned up');
     }
 }
 
-@keyframes slideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
+// Initialize application when DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    window.electrolyzerApp = new ElectrolyzerApp();
+});
+
+// Handle page unload
+window.addEventListener('beforeunload', function() {
+    if (window.electrolyzerApp) {
+        window.electrolyzerApp.destroy();
     }
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-}
-
-/* ===== LIVE DATA FEED ===== */
-.data-feed {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.data-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background: var(--bg-tertiary);
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.data-item::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.data-item:hover {
-    background: var(--bg-secondary);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.data-item:hover::before {
-    opacity: 1;
-}
-
-.data-label {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-.data-value {
-    font-size: 1rem;
-    font-weight: 600;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    position: relative;
-}
-
-.data-value::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
-    transform: scaleX(0);
-    transition: transform 0.3s ease;
-}
-
-.data-item:hover .data-value::after {
-    transform: scaleX(1);
-}
-
-/* ===== TAB PLACEHOLDER ===== */
-.tab-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 400px;
-    text-align: center;
-    color: var(--text-muted);
-    padding: 2rem;
-}
-
-.tab-placeholder h3 {
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-    font-size: 1.5rem;
-    font-weight: 600;
-}
-
-.tab-placeholder p {
-    max-width: 400px;
-    line-height: 1.6;
-    font-size: 1rem;
-    opacity: 0.8;
-}
-
-/* ===== SVG ICON STYLES ===== */
-.nav-icon {
-    transition: all 0.3s ease;
-    flex-shrink: 0;
-}
-
-.nav-btn.active .nav-icon {
-    fill: white;
-    transform: scale(1.1);
-}
-
-.nav-btn:hover .nav-icon {
-    transform: scale(1.05);
-}
-
-.btn-icon {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 0.5rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.btn-icon:hover {
-    background: var(--bg-secondary);
-    border-color: var(--accent-primary);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.btn-icon svg {
-    vertical-align: middle;
-    width: 16px;
-    height: 16px;
-}
-
-/* ===== STATUS INDICATORS ===== */
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 0.5rem;
-    position: relative;
-}
-
-.status-dot.connected {
-    background-color: var(--accent-success);
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
-}
-
-.status-dot.connected::after {
-    content: '';
-    position: absolute;
-    top: -3px;
-    left: -3px;
-    right: -3px;
-    bottom: -3px;
-    border-radius: 50%;
-    background: var(--accent-success);
-    animation: pulse 2s infinite;
-}
-
-.status-dot.disconnected {
-    background-color: var(--accent-danger);
-}
-
-.status-dot.connecting {
-    background-color: var(--accent-warning);
-    animation: blink 1.5s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        transform: scale(1);
-        opacity: 0.8;
-    }
-    70% {
-        transform: scale(2);
-        opacity: 0;
-    }
-    100% {
-        transform: scale(1);
-        opacity: 0;
-    }
-}
-
-@keyframes blink {
-    0%, 50% {
-        opacity: 1;
-    }
-    51%, 100% {
-        opacity: 0.3;
-    }
-}
-
-/* ===== METRIC CARDS ENHANCEMENTS ===== */
-.metric-card {
-    position: relative;
-    overflow: hidden;
-}
-
-.metric-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.metric-card:hover::before {
-    opacity: 1;
-}
-
-.metric-value {
-    transition: all 0.3s ease;
-}
-
-.metric-card:hover .metric-value {
-    transform: scale(1.05);
-}
-
-/* ===== GRID LAYOUT ENHANCEMENTS ===== */
-.grid-layout {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    align-items: start;
-}
-
-@media (min-width: 1024px) {
-    .grid-layout {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .grid-layout .card.large {
-        grid-column: span 2;
-    }
-}
-
-/* ===== CARD ENHANCEMENTS ===== */
-.card {
-    backdrop-filter: blur(10px);
-    transition: all 0.3s ease;
-}
-
-.card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -2px rgba(0, 0, 0, 0.05);
-}
-
-.card-header {
-    border-bottom: 1px solid var(--border-color);
-    padding: 1.25rem 1.5rem;
-    background: var(--bg-secondary);
-    border-radius: 8px 8px 0 0;
-}
-
-.card-content {
-    padding: 1.5rem;
-}
-
-/* ===== STATUS GRID ===== */
-.status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-}
-
-.status-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.status-item label {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-.status-badge {
-    padding: 0.375rem 0.75rem;
-    border-radius: 6px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    text-align: center;
-    transition: all 0.3s ease;
-}
-
-.status-badge.success {
-    background: rgba(16, 185, 129, 0.1);
-    color: var(--accent-success);
-    border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.status-badge.info {
-    background: rgba(59, 130, 246, 0.1);
-    color: var(--accent-info);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.status-badge.warning {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--accent-warning);
-    border: 1px solid rgba(245, 158, 11, 0.2);
-}
-
-.status-badge.danger {
-    background: rgba(239, 68, 68, 0.1);
-    color: var(--accent-danger);
-    border: 1px
+});
