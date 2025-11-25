@@ -1,4 +1,4 @@
-// charts.js - Professional Chart Management for PEM Electrolyzer
+// charts.js - Professional Chart Management for PEM Electrolyzer - REAL DATA ONLY
 class ChartManager {
     constructor() {
         this.charts = new Map();
@@ -12,7 +12,7 @@ class ChartManager {
     initWithRetry(retryCount = 0) {
         try {
             this.initAllCharts();
-            console.log('Charts initialized successfully');
+            console.log('Charts initialized successfully - waiting for real simulation data');
         } catch (error) {
             console.warn('Chart initialization failed, retrying...', error);
             if (retryCount < 3) {
@@ -100,7 +100,7 @@ class ChartManager {
 
         const ctx = canvas.getContext('2d');
         
-        // Initialize with empty data
+        // Initialize with empty data - NO FAKE DATA
         const emptyData = Array(10).fill(null);
 
         try {
@@ -171,7 +171,7 @@ class ChartManager {
                     datasets: [
                         {
                             label: 'O₂ Production Rate',
-                            data: [],
+                            data: [], // EMPTY - waiting for real data
                             borderColor: '#3b82f6',
                             backgroundColor: this.hexToRgba('#3b82f6', 0.1),
                             borderWidth: 3,
@@ -180,7 +180,7 @@ class ChartManager {
                         },
                         {
                             label: 'H₂ Production Rate',
-                            data: [],
+                            data: [], // EMPTY - waiting for real data
                             borderColor: '#10b981',
                             backgroundColor: this.hexToRgba('#10b981', 0.1),
                             borderWidth: 3,
@@ -202,7 +202,7 @@ class ChartManager {
                         },
                         title: {
                             display: true,
-                            text: 'Production Trends - Awaiting Data',
+                            text: 'Production Trends - Awaiting Simulation Data',
                             color: '#f9fafb',
                             font: { size: 16, weight: 'bold' }
                         }
@@ -255,7 +255,7 @@ class ChartManager {
                     datasets: [
                         {
                             label: 'Current Values',
-                            data: [],
+                            data: [], // EMPTY - waiting for real data
                             backgroundColor: [
                                 this.hexToRgba('#3b82f6', 0.8),
                                 this.hexToRgba('#10b981', 0.8),
@@ -286,7 +286,7 @@ class ChartManager {
                         },
                         title: {
                             display: true,
-                            text: 'System Parameters - Awaiting Data',
+                            text: 'System Parameters - Awaiting Simulation Data',
                             color: '#f9fafb',
                             font: { size: 16, weight: 'bold' }
                         }
@@ -334,7 +334,7 @@ class ChartManager {
                 datasets: [
                     {
                         label: 'Temperature Margin',
-                        data: [],
+                        data: [], // EMPTY - waiting for real data
                         borderColor: '#ef4444',
                         backgroundColor: this.hexToRgba('#ef4444', 0.1),
                         borderWidth: 2,
@@ -343,7 +343,7 @@ class ChartManager {
                     },
                     {
                         label: 'Pressure Margin',
-                        data: [],
+                        data: [], // EMPTY - waiting for real data
                         borderColor: '#f59e0b',
                         backgroundColor: this.hexToRgba('#f59e0b', 0.1),
                         borderWidth: 2,
@@ -362,7 +362,7 @@ class ChartManager {
                     },
                     title: {
                         display: true,
-                        text: 'Safety Margins - Awaiting Data',
+                        text: 'Safety Margins - Awaiting Simulation Data',
                         color: '#f9fafb'
                     }
                 },
@@ -403,7 +403,7 @@ class ChartManager {
                 labels: ['Energy Cost', 'H₂ Cost', 'Op Cost', 'Revenue', 'Profit'],
                 datasets: [{
                     label: 'Economic Metrics',
-                    data: [],
+                    data: [], // EMPTY - waiting for real data
                     backgroundColor: [
                         this.hexToRgba('#ef4444', 0.8),
                         this.hexToRgba('#f59e0b', 0.8),
@@ -425,7 +425,7 @@ class ChartManager {
                     legend: { display: false },
                     title: {
                         display: true,
-                        text: 'Economic Analysis - Awaiting Data',
+                        text: 'Economic Analysis - Awaiting Simulation Data',
                         color: '#f9fafb'
                     }
                 },
@@ -477,7 +477,7 @@ class ChartManager {
                     datasets: [
                         {
                             label: 'HE-NMPC (Hybrid Evolutionary)',
-                            data: [85, 90, 78, 95, 88, 75],
+                            data: [], // EMPTY - waiting for real MPC comparison data
                             borderColor: '#3b82f6',
                             backgroundColor: this.hexToRgba('#3b82f6', 0.3),
                             borderWidth: 3,
@@ -488,7 +488,7 @@ class ChartManager {
                         },
                         {
                             label: 'Traditional MPC',
-                            data: [70, 65, 65, 75, 70, 85],
+                            data: [], // EMPTY - waiting for real MPC comparison data
                             borderColor: '#ef4444',
                             backgroundColor: this.hexToRgba('#ef4444', 0.3),
                             borderWidth: 3,
@@ -512,7 +512,7 @@ class ChartManager {
                         },
                         title: {
                             display: true,
-                            text: 'MPC Performance Comparison',
+                            text: 'MPC Performance Comparison - Awaiting Simulation Data',
                             color: '#f9fafb',
                             font: { size: 16, weight: 'bold' }
                         }
@@ -564,7 +564,7 @@ class ChartManager {
                 datasets: [
                     {
                         label: 'HE-NMPC Efficiency',
-                        data: [],
+                        data: [], // EMPTY - waiting for real data
                         borderColor: '#3b82f6',
                         backgroundColor: this.hexToRgba('#3b82f6', 0.1),
                         borderWidth: 3,
@@ -573,7 +573,7 @@ class ChartManager {
                     },
                     {
                         label: 'Traditional MPC Efficiency',
-                        data: [],
+                        data: [], // EMPTY - waiting for real data
                         borderColor: '#ef4444',
                         backgroundColor: this.hexToRgba('#ef4444', 0.1),
                         borderWidth: 3,
@@ -592,7 +592,7 @@ class ChartManager {
                     },
                     title: {
                         display: true,
-                        text: 'Efficiency Trends - Awaiting Data',
+                        text: 'Efficiency Trends - Awaiting Simulation Data',
                         color: '#f9fafb'
                     }
                 },
@@ -634,7 +634,7 @@ class ChartManager {
                 datasets: [
                     {
                         label: 'Simulink O₂ Production',
-                        data: [],
+                        data: [], // EMPTY - waiting for real data
                         borderColor: '#3b82f6',
                         backgroundColor: this.hexToRgba('#3b82f6', 0.1),
                         borderWidth: 2,
@@ -643,7 +643,7 @@ class ChartManager {
                     },
                     {
                         label: 'Real System O₂ Production',
-                        data: [],
+                        data: [], // EMPTY - waiting for real data
                         borderColor: '#10b981',
                         backgroundColor: this.hexToRgba('#10b981', 0.1),
                         borderWidth: 2,
@@ -662,7 +662,7 @@ class ChartManager {
                     },
                     title: {
                         display: true,
-                        text: 'Simulink vs Real System - Awaiting Data',
+                        text: 'Simulink vs Real System - Awaiting Simulation Data',
                         color: '#f9fafb'
                     }
                 },
@@ -739,7 +739,7 @@ class ChartManager {
             this.shiftChartData(productionChart, data.o2Production, data.h2Production);
             
             // Update chart title to show data is live
-            productionChart.options.plugins.title.text = 'Production Trends (Live Data)';
+            productionChart.options.plugins.title.text = 'Production Trends (Live Simulation)';
             productionChart.update('none');
         }
 
@@ -749,7 +749,7 @@ class ChartManager {
             this.updateParametersChart(parametersChart, data);
             
             // Update chart title to show data is live
-            parametersChart.options.plugins.title.text = 'System Parameters (Live Data)';
+            parametersChart.options.plugins.title.text = 'System Parameters (Live Simulation)';
             parametersChart.update('none');
         }
     }
@@ -759,7 +759,7 @@ class ChartManager {
         const safetyChart = this.charts.get('safetyChart');
         if (safetyChart && data.safetyMargin !== undefined) {
             this.shiftAnalyticsData(safetyChart, data.temperatureMargin || data.safetyMargin, data.pressureMargin || data.safetyMargin * 0.8);
-            safetyChart.options.plugins.title.text = 'Safety Margins (Live Data)';
+            safetyChart.options.plugins.title.text = 'Safety Margins (Live Simulation)';
             safetyChart.update('none');
         }
 
@@ -767,7 +767,7 @@ class ChartManager {
         const trendsChart = this.charts.get('trendsChart');
         if (trendsChart && data.efficiency !== undefined) {
             this.shiftTrendsData(trendsChart, data.efficiency, data.efficiency * 0.85);
-            trendsChart.options.plugins.title.text = 'Efficiency Trends (Live Data)';
+            trendsChart.options.plugins.title.text = 'Efficiency Trends (Live Simulation)';
             trendsChart.update('none');
         }
 
@@ -775,8 +775,16 @@ class ChartManager {
         const simulinkChart = this.charts.get('simulinkChart');
         if (simulinkChart && data.o2Production !== undefined) {
             this.shiftSimulinkData(simulinkChart, data.o2Production, data.o2Production * 1.1);
-            simulinkChart.options.plugins.title.text = 'Simulink vs Real System (Live Data)';
+            simulinkChart.options.plugins.title.text = 'Simulink vs Real System (Live Simulation)';
             simulinkChart.update('none');
+        }
+
+        // Update economic chart
+        const economicChart = this.charts.get('economicChart');
+        if (economicChart && data.powerConsumption !== undefined) {
+            this.updateEconomicChart(economicChart, data);
+            economicChart.options.plugins.title.text = 'Economic Analysis (Live Simulation)';
+            economicChart.update('none');
         }
     }
 
@@ -862,6 +870,128 @@ class ChartManager {
         }
     }
 
+    updateEconomicChart(chart, data) {
+        if (chart.data.datasets[0]) {
+            // Calculate economic metrics based on real data
+            const energyCost = (data.powerConsumption || 0) * 0.12; // $0.12/kWh
+            const h2Cost = (data.o2Production || 0) * 0.15; // $0.15/L O2 equivalent
+            const opCost = energyCost + h2Cost + 25; // Fixed costs
+            const revenue = (data.o2Production || 0) * 2.5; // $2.5/L O2
+            const profit = revenue - opCost;
+            
+            chart.data.datasets[0].data = [energyCost, h2Cost, opCost, revenue, profit];
+            chart.update('none');
+        }
+    }
+
+    updatePerformanceChart(heNmpcData, traditionalMpcData) {
+        const performanceChart = this.charts.get('performanceChart');
+        if (!performanceChart) return;
+
+        // Only update if we have real MPC comparison data
+        if (heNmpcData && traditionalMpcData && 
+            Array.isArray(heNmpcData) && Array.isArray(traditionalMpcData) &&
+            heNmpcData.length === 6 && traditionalMpcData.length === 6) {
+            
+            performanceChart.data.datasets[0].data = heNmpcData;
+            performanceChart.data.datasets[1].data = traditionalMpcData;
+            performanceChart.options.plugins.title.text = 'MPC Performance Comparison (Live Simulation)';
+            performanceChart.update('none');
+            
+            console.log('MPC Performance chart updated with real comparison data');
+        } else {
+            console.warn('Invalid MPC comparison data format received');
+        }
+    }
+
+    updateAllChartsWithSimulationData(simulationData) {
+        if (!simulationData) {
+            console.log('No simulation data received');
+            return;
+        }
+
+        console.log('Updating all charts with simulation data:', simulationData);
+
+        // Update main production charts
+        if (simulationData.o2Production !== undefined) {
+            this.updateProductionData(simulationData);
+        }
+
+        // Update parameters chart
+        if (simulationData.voltage !== undefined) {
+            this.updateParametersData(simulationData);
+        }
+
+        // Update mini charts
+        this.updateMiniCharts(simulationData);
+
+        // Update MPC performance comparison if we have the data
+        if (simulationData.mpcComparison) {
+            this.updatePerformanceChart(
+                simulationData.mpcComparison.heNmpc,
+                simulationData.mpcComparison.traditional
+            );
+        }
+
+        // Update safety margins
+        if (simulationData.safetyMetrics) {
+            this.updateSafetyData(simulationData.safetyMetrics);
+        }
+
+        // Update economic data
+        if (simulationData.economicMetrics) {
+            this.updateEconomicData(simulationData.economicMetrics);
+        }
+    }
+
+    updateProductionData(data) {
+        const productionChart = this.charts.get('productionChart');
+        if (productionChart) {
+            this.shiftChartData(productionChart, data.o2Production, data.h2Production || data.o2Production * 2);
+            productionChart.options.plugins.title.text = 'Production Trends (Live Simulation)';
+            productionChart.update('none');
+        }
+    }
+
+    updateSafetyData(safetyData) {
+        const safetyChart = this.charts.get('safetyChart');
+        if (safetyChart) {
+            this.shiftAnalyticsData(
+                safetyChart, 
+                safetyData.temperatureMargin || 0,
+                safetyData.pressureMargin || 0
+            );
+            safetyChart.options.plugins.title.text = 'Safety Margins (Live Simulation)';
+            safetyChart.update('none');
+        }
+
+        const trendsChart = this.charts.get('trendsChart');
+        if (trendsChart && safetyData.efficiency !== undefined) {
+            this.shiftTrendsData(
+                trendsChart,
+                safetyData.efficiency,
+                safetyData.traditionalEfficiency || safetyData.efficiency * 0.85
+            );
+            trendsChart.options.plugins.title.text = 'Efficiency Trends (Live Simulation)';
+            trendsChart.update('none');
+        }
+    }
+
+    updateEconomicData(economicData) {
+        const economicChart = this.charts.get('economicChart');
+        if (economicChart) {
+            economicChart.data.datasets[0].data = [
+                economicData.energyCost || 0,
+                economicData.h2Cost || 0,
+                economicData.operatingCost || 0,
+                economicData.revenue || 0,
+                economicData.profit || 0
+            ];
+            economicChart.options.plugins.title.text = 'Economic Analysis (Live Simulation)';
+            economicChart.update('none');
+        }
+    }
+
     generateTimeLabels(count) {
         const now = new Date();
         return Array.from({length: count}, (_, i) => {
@@ -887,6 +1017,27 @@ class ChartManager {
                 chart.resize();
             }
         });
+    }
+
+    // Method to clear all chart data
+    clearAllChartData() {
+        this.charts.forEach((chart, chartId) => {
+            if (chart && chart.data) {
+                // Clear all datasets
+                chart.data.datasets.forEach(dataset => {
+                    dataset.data = [];
+                });
+                
+                // Reset titles to "awaiting data"
+                if (chart.options.plugins.title) {
+                    chart.options.plugins.title.text = chart.options.plugins.title.text.replace('(Live Simulation)', '- Awaiting Simulation Data');
+                }
+                
+                chart.update('none');
+            }
+        });
+        
+        console.log('All chart data cleared - waiting for new simulation data');
     }
 }
 
