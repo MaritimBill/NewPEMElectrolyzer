@@ -1,26 +1,24 @@
-// navigation.js - Navigation Manager for PEM Electrolyzer
+// navigation.js - Navigation Manager for PEM Electrolyzer - ALL TABS ENABLED
 class NavigationManager {
     constructor() {
         this.currentTab = 'dashboard';
+        this.availableTabs = ['dashboard', 'control', 'safety', 'economic', 'analytics', 'simulink'];
         this.init();
     }
 
     init() {
         this.setupTabNavigation();
+        this.enableAllTabs();
         // Force show dashboard on init
         this.switchToTab('dashboard');
-        console.log('Navigation Manager Initialized - Dashboard Active');
+        console.log('Navigation Manager Initialized - All Tabs Enabled');
     }
 
     setupTabNavigation() {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const tabName = e.currentTarget.dataset.tab;
-                if (tabName === 'dashboard') {
-                    this.switchToTab(tabName);
-                } else {
-                    this.showTabDisabledMessage(tabName);
-                }
+                this.switchToTab(tabName);
             });
         });
     }
@@ -47,53 +45,53 @@ class NavigationManager {
             targetButton.classList.add('active');
             this.currentTab = tabName;
             
-            // If switching to dashboard, ensure charts are visible
-            if (tabName === 'dashboard') {
-                setTimeout(() => {
-                    if (window.chartManager) {
-                        window.chartManager.resizeCharts();
-                    }
-                }, 100);
-            }
+            // Resize charts when switching tabs
+            setTimeout(() => {
+                if (window.chartManager) {
+                    window.chartManager.resizeCharts();
+                }
+            }, 100);
+        } else {
+            console.error(`Tab or button not found: ${tabName}`);
         }
     }
 
-    showTabDisabledMessage(tabName) {
-        const tabNames = {
+    enableAllTabs() {
+        this.availableTabs.forEach(tabName => {
+            this.enableTab(tabName);
+        });
+    }
+
+    enableTab(tabName) {
+        const button = document.querySelector(`[data-tab="${tabName}"]`);
+        if (button) {
+            button.style.opacity = '1';
+            button.style.cursor = 'pointer';
+            button.disabled = false;
+            button.title = `Switch to ${this.getTabDisplayName(tabName)}`;
+        }
+    }
+
+    disableTab(tabName) {
+        const button = document.querySelector(`[data-tab="${tabName}"]`);
+        if (button) {
+            button.style.opacity = '0.6';
+            button.style.cursor = 'not-allowed';
+            button.disabled = true;
+            button.title = 'This tab is currently disabled';
+        }
+    }
+
+    getTabDisplayName(tabName) {
+        const names = {
+            'dashboard': 'Dashboard',
             'control': 'Control Panel',
             'safety': 'Safety MPC',
             'economic': 'Economic MPC', 
             'analytics': 'Analytics',
             'simulink': 'Simulink Integration'
         };
-        
-        const message = `${tabNames[tabName] || tabName} is currently disabled. Only the Dashboard is active in this demonstration version.`;
-        
-        if (window.electrolyzerApp && window.electrolyzerApp.showNotification) {
-            window.electrolyzerApp.showNotification(message, 'warning');
-        } else {
-            alert(message); // Fallback
-        }
-    }
-
-    // Method to enable specific tab (for future use)
-    enableTab(tabName) {
-        const button = document.querySelector(`[data-tab="${tabName}"]`);
-        if (button) {
-            button.style.opacity = '1';
-            button.style.cursor = 'pointer';
-            button.title = '';
-        }
-    }
-
-    // Method to disable specific tab
-    disableTab(tabName) {
-        const button = document.querySelector(`[data-tab="${tabName}"]`);
-        if (button) {
-            button.style.opacity = '0.6';
-            button.style.cursor = 'not-allowed';
-            button.title = 'This tab is currently disabled';
-        }
+        return names[tabName] || tabName;
     }
 
     // Get current active tab
@@ -103,7 +101,7 @@ class NavigationManager {
 
     // Check if tab is available
     isTabAvailable(tabName) {
-        return tabName === 'dashboard'; // Only dashboard is available
+        return this.availableTabs.includes(tabName);
     }
 }
 
