@@ -1,4 +1,4 @@
-// app.js - Enhanced for MATLAB/PEM Electrolyzer Integration
+// app.js - Fixed Initialization for PEM Electrolyzer
 class ElectrolyzerApp {
     constructor() {
         this.mqttClient = null;
@@ -23,6 +23,9 @@ class ElectrolyzerApp {
     }
 
     initializeApp() {
+        console.log('DOM fully loaded, initializing components...');
+        
+        // Initialize components in correct order
         this.initChartManager();
         this.initSimulinkBridge();
         this.initEventListeners();
@@ -34,6 +37,15 @@ class ElectrolyzerApp {
         });
     }
 
+    initChartManager() {
+        try {
+            this.chartManager = new ChartManager();
+            console.log('Chart Manager Initialized');
+        } catch (error) {
+            console.error('Error initializing chart manager:', error);
+        }
+    }
+
     initSimulinkBridge() {
         try {
             this.simulinkBridge = new window.SimulinkBridge();
@@ -43,6 +55,41 @@ class ElectrolyzerApp {
             console.error('Failed to initialize Simulink bridge:', error);
             this.showNotification('Using fallback simulation mode', 'info');
         }
+    }
+
+    initEventListeners() {
+        // Window resize handling
+        window.addEventListener('resize', () => {
+            if (this.chartManager) {
+                setTimeout(() => this.chartManager.resizeCharts(), 100);
+            }
+        });
+
+        // System control buttons
+        const controlButtons = document.querySelectorAll('.control-btn');
+        controlButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.handleControlAction(e.target.dataset.action);
+            });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 'r':
+                        e.preventDefault();
+                        this.refreshData();
+                        break;
+                    case 'd':
+                        e.preventDefault();
+                        this.toggleDataView();
+                        break;
+                }
+            }
+        });
+
+        console.log('Event listeners initialized');
     }
 
     setupSimulinkCallbacks() {
@@ -181,6 +228,14 @@ class ElectrolyzerApp {
                               this.isConnected ? 'success' : 'warning');
     }
 
+    updateStatusBadge(elementId, text, type) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = text;
+            element.className = `status-badge ${type}`;
+        }
+    }
+
     updateAnalyticsMetrics(comparisonData) {
         // Update real MPC performance metrics in analytics tab
         const metricsContainer = document.querySelector('.metrics-comparison');
@@ -272,14 +327,116 @@ class ElectrolyzerApp {
         }
     }
 
-    // ... (keep other existing methods like showNotification, etc.)
+    handleControlAction(action) {
+        console.log('Control action triggered:', action);
+        
+        switch(action) {
+            case 'start':
+                this.sendControlCommand('start');
+                this.showNotification('Sending START command to system...', 'info');
+                break;
+            case 'stop':
+                this.sendControlCommand('stop');
+                this.showNotification('Sending STOP command to system...', 'warning');
+                break;
+            case 'reset':
+                this.sendControlCommand('reset');
+                this.showNotification('Sending RESET command to system...', 'info');
+                break;
+            case 'emergency':
+                this.sendControlCommand('emergency_stop');
+                this.showNotification('EMERGENCY STOP ACTIVATED!', 'error');
+                break;
+        }
+    }
 
-    // Add method to manually trigger test data
+    sendControlCommand(command) {
+        // Send command to real system via MQTT or Simulink
+        if (this.simulinkBridge) {
+            try {
+                this.simulinkBridge.sendCommand(command);
+            } catch (error) {
+                console.error('Failed to send command:', error);
+            }
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-message">${message}</span>
+                <button class="notification-close">&times;</button>
+            </div>
+        `;
+        
+        // Add to notification container
+        let container = document.getElementById('notification-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'notification-container';
+            container.className = 'notification-container';
+            document.body.appendChild(container);
+        }
+        
+        container.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.animation = 'slideOut 0.3s ease forwards';
+                setTimeout(() => notification.remove(), 300);
+            }
+        }, 5000);
+        
+        // Close button handler
+        notification.querySelector('.notification-close').addEventListener('click', () => {
+            notification.remove();
+        });
+    }
+
+    refreshData() {
+        console.log('Manual data refresh requested');
+        this.showNotification('Refreshing data from system...', 'info');
+        
+        // Request latest data from system
+        if (this.simulinkBridge) {
+            this.simulinkBridge.sendCommand('refresh_data');
+        }
+    }
+
+    toggleDataView() {
+        // Toggle between different data views
+        console.log('Data view toggled');
+        this.showNotification('Data view changed', 'info');
+    }
+
+    // Method to manually trigger test data
     injectTestData() {
         if (this.simulinkBridge && typeof this.simulinkBridge.injectTestData === 'function') {
             this.simulinkBridge.injectTestData();
             this.showNotification('Test data injected for chart verification', 'info');
         }
+    }
+
+    // Public method to get current system state
+    getSystemState() {
+        return {
+            connected: this.isConnected,
+            currentData: this.currentData,
+            dataPointsReceived: this.dataPointsReceived,
+            lastUpdate: this.currentData ? this.currentData.timestamp : null
+        };
+    }
+
+    // Cleanup method
+    destroy() {
+        if (this.simulinkBridge) {
+            this.simulinkBridge.stopSimulation();
+        }
+        console.log('Electrolyzer app cleaned up');
     }
 }
 
@@ -293,4 +450,11 @@ document.addEventListener('DOMContentLoaded', function() {
             window.electrolyzerApp.injectTestData();
         }
     };
+});
+
+// Handle page unload
+window.addEventListener('beforeunload', function() {
+    if (window.electrolyzerApp) {
+        window.electrolyzerApp.destroy();
+    }
 });
