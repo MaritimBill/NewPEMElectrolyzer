@@ -1135,6 +1135,36 @@ class ChartManager {
         
         console.log('All chart data cleared - waiting for new simulation data');
     }
+    // In charts.js - Add MPC results handling
+updateMPCResults(mpcResults) {
+    // Update comparison charts with REAL data
+    const performanceData = mpcResults.controller_performance;
+    
+    // Update bar charts
+    this.updateMPCComparisonChart(performanceData);
+    
+    // Update trend charts
+    this.updateMPCTrends(performanceData);
+    
+    // Update radar charts
+    this.updateMPCRadar(performanceData);
+}
+
+updateMPCComparisonChart(performanceData) {
+    const ctx = document.getElementById('mpcComparisonChart');
+    if (!ctx) return;
+    
+    const controllers = Object.keys(performanceData);
+    const efficiencies = controllers.map(name => performanceData[name].efficiency);
+    const responseTimes = controllers.map(name => performanceData[name].response_time);
+    const costs = controllers.map(name => performanceData[name].control_cost);
+    
+    // Update chart data with REAL values
+    this.charts.mpcComparison.data.datasets[0].data = efficiencies;
+    this.charts.mpcComparison.data.datasets[1].data = responseTimes;
+    this.charts.mpcComparison.data.datasets[2].data = costs;
+    this.charts.mpcComparison.update();
+}
 }
 
 // Initialize chart manager when DOM is loaded
