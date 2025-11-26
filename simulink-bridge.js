@@ -355,6 +355,61 @@ class SimulinkBridge {
             window.chartManager.updateMPCData(data);
         }
     }
+     // ... existing code ...
+    
+    // ADD MPC COMMAND METHOD
+    sendMPCCommand(command, data) {
+        const message = {
+            mpc_command: command,
+            ...data,
+            source: 'web_mpc_frontend',
+            timestamp: new Date().toISOString()
+        };
+        
+        this.sendCommand('apply_controls', message);
+        console.log('🚀 MPC Command sent to MATLAB:', command, data);
+    }
+    
+    // Ensure this method exists for receiving MPC results
+    processElectrolyzerData(rawData) {
+        console.log('Processing data from MATLAB:', rawData);
+        
+        // Check if this is MPC results
+        if (rawData.mpc_results && rawData.controller_performance) {
+            console.log('🎯 Received REAL MPC results from PEM');
+            
+            // Process as MPC results
+            if (this.onMPCResults) {
+                this.onMPCResults(rawData);
+            }
+            
+            // Also update charts
+            if (window.chartManager && window.chartManager.updateMPCComparisonCharts) {
+                window.chartManager.updateMPCComparisonCharts(rawData.controller_performance);
+            }
+        } else {
+            // Process as regular system data
+            const processedData = {
+                o2Production: rawData.o2_production,
+                efficiency: rawData.efficiency,
+                stackTemperature: rawData.current_temp,
+                safetyMargin: rawData.safety_margin,
+                voltage: rawData.voltage,
+                current: rawData.current,
+                pressure: rawData.pressure,
+                flowRate: rawData.flow_rate,
+                purity: rawData.purity,
+                powerConsumption: rawData.power_consumption,
+                timestamp: rawData.timestamp
+            };
+            
+            if (this.onSimulationData) {
+                this.onSimulationData(processedData);
+            }
+        }
+    }
+
+    
 }
 
 // Make available globally
