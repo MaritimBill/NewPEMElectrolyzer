@@ -329,6 +329,32 @@ class SimulinkBridge {
         
         this.processElectrolyzerData(testData);
     }
+      // ADD THESE METHODS:
+    sendMPCCommand(command, data) {
+        const mpcMessage = {
+            mpc_command: command,
+            ...data,
+            source: 'web_mpc_controller',
+            timestamp: new Date().toISOString()
+        };
+        
+        this.sendCommand('mpc_control', mpcMessage);
+        console.log('🎯 MPC Command sent to MATLAB:', command, data);
+    }
+
+    processMPCResults(data) {
+        console.log('📊 MPC Results from MATLAB:', data);
+        
+        // Forward to neural MPC manager
+        if (window.neuralMPCManager && window.neuralMPCManager.onMPCFeedback) {
+            window.neuralMPCManager.onMPCFeedback(data);
+        }
+        
+        // Update charts with MPC data
+        if (window.chartManager) {
+            window.chartManager.updateMPCData(data);
+        }
+    }
 }
 
 // Make available globally
