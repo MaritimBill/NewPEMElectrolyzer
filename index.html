@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HE-NMPC Electrolyzer - LIVE</title>
+    <title>HE-NMPC Electrolyzer - LIVE MQTT</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -87,13 +88,25 @@
             font-family: monospace;
             font-size: 12px;
         }
+        .connection-info {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 HE-NMPC PEM Electrolyzer Controller</h1>
-            <p>Real-Time MATLAB + Web Dashboard</p>
+            <h1>🚀 HE-NMPC PEM Electrolyzer - LIVE MQTT</h1>
+            <p>Real-Time MATLAB ↔ Web Dashboard via MQTT</p>
+        </div>
+
+        <div class="connection-info">
+            <strong>MQTT Connection:</strong> 
+            <span id="mqttStatus">Connecting to broker.hivemq.com...</span>
         </div>
 
         <div class="status disconnected" id="status">
@@ -165,7 +178,7 @@
         </div>
 
         <div class="data-log" id="dataLog">
-            <div>Data log will appear here...</div>
+            <div>MQTT Data Log - Waiting for MATLAB data...</div>
         </div>
     </div>
 
@@ -174,39 +187,153 @@
             constructor() {
                 this.charts = {};
                 this.dataHistory = [];
+                this.mqttClient = null;
                 this.setupCharts();
-                this.startPolling();
+                this.setupMQTT();
             }
 
-            startPolling() {
-                // Simulate data polling (in real app, this would be WebSocket or SSE)
-                setInterval(() => {
-                    this.checkForNewData();
-                }, 2000); // Check every 2 seconds
-            }
+            setupMQTT() {
+                console.log('🔌 Connecting to MQTT broker...');
+                
+                // Use WebSocket connection for browser compatibility
+                const options = {
+                    protocol: 'wss',
+                    host: 'broker.hivemq.com',
+                    port: 8884,
+                    path: '/mqtt',
+                    clientId: 'web_dashboard_' + Math.random().toString(16).substr(2, 8)
+                };
 
-            checkForNewData() {
-                // In a real implementation, this would fetch from your server
-                // For now, we'll simulate some data to show the charts work
-                if (this.dataHistory.length === 0) {
-                    this.updateStatus('⏳ Waiting for MATLAB data... Run the MATLAB script!', 'disconnected');
+                try {
+                    this.mqttClient = mqtt.connect(options);
                     
-                    // Show sample data for demo
-                    this.showSampleData();
+                    this.mqttClient.on('connect', () => {
+                        console.log('✅ Connected to MQTT broker');
+                        document.getElementById('mqttStatus').innerHTML = 
+                            '<span style="color: #10b981;">✅ Connected to broker.hivemq.com</span>';
+                        
+                        // Subscribe to MATLAB data topic
+                        this.mqttClient.subscribe('pem/electrolyzer/data', (err) => {
+                            if (!err) {
+                                console.log('✅ Subscribed to: pem/electrolyzer/data');
+                                this.updateStatus('✅ Connected - Waiting for MATLAB data...', 'connected');
+                            }
+                        });
+
+                        // Subscribe to command responses
+                        this.mqttClient.subscribe('electrolyzer/commands', (err) => {
+                            if (!err) {
+                                console.log('✅ Subscribed to: electrolyzer/commands');
+                            }
+                        });
+                    });
+
+                    this.mqttClient.on('message', (topic, message) => {
+                        console.log(`📨 MQTT Message on ${topic}:`, message.toString());
+                        this.handleMQTTMessage(topic, message.toString());
+                    });
+
+                    this.mqttClient.on('error', (error) => {
+                        console.error('❌ MQTT Error:', error);
+                        document.getElementById('mqttStatus').innerHTML = 
+                            '<span style="color: #ef4444;">❌ MQTT Connection Failed</span>';
+                        this.updateStatus('❌ MQTT Connection Failed', 'disconnected');
+                    });
+
+                    this.mqttClient.on('close', () => {
+                        console.log('🔌 MQTT Connection closed');
+                        document.getElementById('mqttStatus').innerHTML = 
+                            '<span style="color: #ef4444;">❌ MQTT Disconnected</span>';
+                    });
+
+                } catch (error) {
+                    console.error('❌ MQTT Setup failed:', error);
+                    this.updateStatus('❌ MQTT Setup Failed', 'disconnected');
                 }
             }
 
-            showSampleData() {
-                // Show some sample data so charts aren't empty
-                const sampleData = {
-                    o2_production: 35 + Math.random() * 10,
-                    efficiency: 75 + Math.random() * 10,
-                    current_temp: 60 + Math.random() * 15,
-                    safety_margin: 85 + Math.random() * 10
-                };
+            handleMQTTMessage(topic, message) {
+                try {
+                    const data = JSON.parse(message);
+                    
+                    if (topic === 'pem/electrolyzer/data') {
+                        this.processData(data);
+                    } else if (topic === 'electrolyzer/commands') {
+                        this.handleCommandResponse(data);
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Error parsing MQTT message:', error);
+                    this.addToLog(`ERROR: Invalid JSON received - ${message}`);
+                }
+            }
+
+            processData(data) {
+                console.log('📊 Processing MATLAB data:', data);
                 
-                this.processData(sampleData);
-                this.updateStatus('🔬 DEMO MODE - Run MATLAB for real data', 'disconnected');
+                // Update status with live data
+                this.updateStatus(
+                    `✅ LIVE MATLAB DATA - O₂: ${data.o2_production?.toFixed(1)} L/min | ` +
+                    `Eff: ${data.efficiency?.toFixed(1)}% | ` +
+                    `Temp: ${data.current_temp?.toFixed(1)}°C | ` +
+                    `Safety: ${data.safety_margin?.toFixed(1)}%`,
+                    'connected'
+                );
+
+                // Add to data log
+                this.addToLog(`MATLAB: O₂=${data.o2_production?.toFixed(1)}, Eff=${data.efficiency?.toFixed(1)}%, Temp=${data.current_temp?.toFixed(1)}°C`);
+
+                // Update production chart
+                if (data.o2_production) {
+                    this.addDataPoint(this.charts.production, 0, data.o2_production);
+                    this.addDataPoint(this.charts.production, 1, data.o2_production * 2); // H2 is 2x O2
+                }
+
+                // Update efficiency chart
+                if (data.efficiency) {
+                    this.addDataPoint(this.charts.efficiency, 0, data.efficiency);
+                }
+
+                // Update safety chart
+                if (data.safety_margin) {
+                    this.addDataPoint(this.charts.safety, 0, data.safety_margin);
+                }
+
+                // Update temperature chart
+                if (data.current_temp) {
+                    this.addDataPoint(this.charts.temperature, 0, data.current_temp);
+                }
+
+                // Update MPC comparison
+                this.updateMPCComparison(data);
+
+                // Store data
+                this.dataHistory.push({...data, timestamp: new Date()});
+                if (this.dataHistory.length > 50) {
+                    this.dataHistory.shift();
+                }
+            }
+
+            handleCommandResponse(response) {
+                console.log('🔧 Command response:', response);
+                this.addToLog(`COMMAND: ${response.action} - ${response.status}`);
+            }
+
+            sendCommandToMATLAB(command, data = {}) {
+                if (!this.mqttClient || !this.mqttClient.connected) {
+                    alert('❌ MQTT not connected. Cannot send command.');
+                    return;
+                }
+
+                const message = {
+                    action: command,
+                    ...data,
+                    timestamp: new Date().toISOString(),
+                    source: 'web_dashboard'
+                };
+
+                this.mqttClient.publish('electrolyzer/commands', JSON.stringify(message));
+                this.addToLog(`SENT: ${command} command to MATLAB`);
             }
 
             setupCharts() {
@@ -240,7 +367,7 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            title: { display: true, text: 'Gas Production Rates', color: 'white' }
+                            title: { display: true, text: 'Gas Production Rates - LIVE MQTT', color: 'white' }
                         },
                         scales: {
                             x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
@@ -270,7 +397,7 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            title: { display: true, text: 'System Efficiency', color: 'white' }
+                            title: { display: true, text: 'System Efficiency - LIVE MQTT', color: 'white' }
                         },
                         scales: {
                             x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
@@ -340,7 +467,7 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            title: { display: true, text: 'Safety Margin', color: 'white' }
+                            title: { display: true, text: 'Safety Margin - LIVE MQTT', color: 'white' }
                         },
                         scales: {
                             x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
@@ -375,7 +502,7 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            title: { display: true, text: 'Stack Temperature', color: 'white' }
+                            title: { display: true, text: 'Stack Temperature - LIVE MQTT', color: 'white' }
                         },
                         scales: {
                             x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
@@ -394,53 +521,6 @@
                 const canvas = document.getElementById(canvasId);
                 const ctx = canvas.getContext('2d');
                 return new Chart(ctx, config);
-            }
-
-            processData(data) {
-                console.log('📊 Processing data:', data);
-                
-                // Update status with live data
-                if (data.source === 'MATLAB_RealTime') {
-                    this.updateStatus(
-                        `✅ LIVE MATLAB DATA - O₂: ${data.o2_production?.toFixed(1)} L/min | ` +
-                        `Eff: ${data.efficiency?.toFixed(1)}% | ` +
-                        `Temp: ${data.current_temp?.toFixed(1)}°C`,
-                        'connected'
-                    );
-                }
-
-                // Add to data log
-                this.addToLog(data);
-
-                // Update production chart
-                if (data.o2_production) {
-                    this.addDataPoint(this.charts.production, 0, data.o2_production);
-                    this.addDataPoint(this.charts.production, 1, data.o2_production * 2); // H2 is 2x O2
-                }
-
-                // Update efficiency chart
-                if (data.efficiency) {
-                    this.addDataPoint(this.charts.efficiency, 0, data.efficiency);
-                }
-
-                // Update safety chart
-                if (data.safety_margin) {
-                    this.addDataPoint(this.charts.safety, 0, data.safety_margin);
-                }
-
-                // Update temperature chart
-                if (data.current_temp) {
-                    this.addDataPoint(this.charts.temperature, 0, data.current_temp);
-                }
-
-                // Update MPC comparison
-                this.updateMPCComparison(data);
-
-                // Store data
-                this.dataHistory.push(data);
-                if (this.dataHistory.length > 50) {
-                    this.dataHistory.shift();
-                }
             }
 
             addDataPoint(chart, datasetIndex, value) {
@@ -492,11 +572,11 @@
                 status.className = `status ${type}`;
             }
 
-            addToLog(data) {
+            addToLog(message) {
                 const log = document.getElementById('dataLog');
                 const time = new Date().toLocaleTimeString();
                 const entry = document.createElement('div');
-                entry.textContent = `${time} - O₂: ${data.o2_production?.toFixed(1)} | Eff: ${data.efficiency?.toFixed(1)}% | Temp: ${data.current_temp?.toFixed(1)}°C`;
+                entry.innerHTML = `<span style="color: #6b7280;">[${time}]</span> ${message}`;
                 log.appendChild(entry);
                 
                 // Keep only last 10 entries
@@ -506,58 +586,25 @@
                 
                 log.scrollTop = log.scrollHeight;
             }
-
-            // Method to manually inject MATLAB data (for testing)
-            injectMATLABData() {
-                const matlabData = {
-                    o2_production: 35 + Math.random() * 15,
-                    efficiency: 75 + Math.random() * 10,
-                    current_temp: 60 + Math.random() * 20,
-                    safety_margin: 80 + Math.random() * 15,
-                    source: 'MATLAB_RealTime'
-                };
-                this.processData(matlabData);
-            }
         }
 
         // Global functions for controls
         function sendCommand(action) {
-            const message = {
-                action: action,
-                timestamp: new Date().toISOString()
-            };
-            console.log('Sending command:', message);
-            alert(`Command sent: ${action}\n\nIn real implementation, this would send to MATLAB via MQTT`);
+            if (window.dashboard) {
+                window.dashboard.sendCommandToMATLAB(action);
+            }
         }
 
         function updateSetpoint() {
             const setpoint = document.getElementById('setpoint').value;
-            const message = {
-                economicSetpoint: parseFloat(setpoint),
-                timestamp: new Date().toISOString()
-            };
-            console.log('Updating setpoint:', message);
-            alert(`Economic setpoint updated to: ${setpoint}\n\nThis would be sent to MATLAB in real implementation`);
-        }
-
-        // Debug function to simulate MATLAB data
-        function simulateMATLABData() {
             if (window.dashboard) {
-                window.dashboard.injectMATLABData();
+                window.dashboard.sendCommandToMATLAB('set_setpoint', { economicSetpoint: parseFloat(setpoint) });
             }
         }
 
         // Start the dashboard
         document.addEventListener('DOMContentLoaded', () => {
             window.dashboard = new ElectrolyzerDashboard();
-            
-            // Add debug button
-            const debugBtn = document.createElement('button');
-            debugBtn.textContent = 'Simulate MATLAB Data';
-            debugBtn.className = 'control-btn';
-            debugBtn.style.background = '#8b5cf6';
-            debugBtn.onclick = simulateMATLABData;
-            document.querySelector('.control-panel').appendChild(debugBtn);
         });
     </script>
 </body>
