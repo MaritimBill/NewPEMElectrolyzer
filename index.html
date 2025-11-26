@@ -136,6 +136,8 @@
             </div>
         </div>
 
+        
+
         <!-- Frontend MPC Analysis -->
         <div class="mpc-comparison">
             <h3>🎯 Frontend MPC Performance Analysis (Based on MATLAB Data)</h3>
@@ -201,6 +203,15 @@
             <div>System Log - MATLAB Physical System Data...</div>
         </div>
     </div>
+    <div class="control-panel">
+    <h3>MPC Experiment Control</h3>
+    <button class="control-btn" onclick="window.chartManager.triggerMPCComputation()">
+        🚀 Run MPC Experiment
+    </button>
+    <button class="control-btn" onclick="window.neuralMPCManager.triggerComputation()">
+        🔄 Compute MPC Controls
+    </button>
+</div>
 
     <script>
         class FrontendMPCAnalysis {
