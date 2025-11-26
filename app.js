@@ -1,460 +1,280 @@
-// app.js - Fixed Initialization for PEM Electrolyzer
+// app.js - COMPLETE FIXED VERSION
 class ElectrolyzerApp {
     constructor() {
-        this.mqttClient = null;
+        this.simulinkBridge = new SimulinkBridge();
         this.currentData = null;
-        this.simulationData = null;
         this.isConnected = false;
-        this.chartManager = null;
-        this.simulinkBridge = null;
-        this.dataPointsReceived = 0;
+        this.mpcEnabled = true;
         
         this.init();
+        this.initNeuralMPC();
     }
 
     init() {
-        console.log('HE-NMPC Electrolyzer Controller Initializing...');
+        console.log('🏭 PEM Electrolyzer App Initializing...');
         
+        this.setupEventListeners();
+        this.setupSimulinkBridge();
+        this.updateConnectionStatus(false);
+        
+        console.log('✅ App initialized - waiting for MATLAB connection...');
+    }
+
+    initNeuralMPC() {
+        // Initialize Neural MPC Manager when DOM is ready
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.initializeApp());
-        } else {
-            this.initializeApp();
-        }
-    }
-
-    initializeApp() {
-        console.log('DOM fully loaded, initializing components...');
-        
-        // Initialize components in correct order
-        this.initChartManager();
-        this.initSimulinkBridge();
-        this.initEventListeners();
-        this.updateSystemStatus();
-        
-        this.connectToSimulation().catch(error => {
-            console.error('Simulation connection failed:', error);
-            this.showNotification('Starting fallback simulation mode...', 'warning');
-        });
-    }
-
-    initChartManager() {
-        try {
-            this.chartManager = new ChartManager();
-            console.log('Chart Manager Initialized');
-        } catch (error) {
-            console.error('Error initializing chart manager:', error);
-        }
-    }
-
-    initSimulinkBridge() {
-        try {
-            this.simulinkBridge = new window.SimulinkBridge();
-            this.setupSimulinkCallbacks();
-            console.log('Simulink bridge initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize Simulink bridge:', error);
-            this.showNotification('Using fallback simulation mode', 'info');
-        }
-    }
-
-    initEventListeners() {
-        // Window resize handling
-        window.addEventListener('resize', () => {
-            if (this.chartManager) {
-                setTimeout(() => this.chartManager.resizeCharts(), 100);
-            }
-        });
-
-        // System control buttons
-        const controlButtons = document.querySelectorAll('.control-btn');
-        controlButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.handleControlAction(e.target.dataset.action);
+            document.addEventListener('DOMContentLoaded', () => {
+                this.setupNeuralMPC();
             });
+        } else {
+            this.setupNeuralMPC();
+        }
+    }
+
+    setupNeuralMPC() {
+        console.log('🔗 Setting up Neural MPC system...');
+        
+        // Initialize Neural MPC Manager
+        if (typeof NeuralMPCManager !== 'undefined' && !window.neuralMPCManager) {
+            window.neuralMPCManager = new NeuralMPCManager();
+            console.log('✅ Neural MPC Manager initialized');
+        } else if (window.neuralMPCManager) {
+            console.log('✅ Neural MPC Manager already exists');
+        } else {
+            console.warn('⚠️ NeuralMPCManager class not found');
+        }
+
+        // Setup MPC data handling
+        this.setupMPCDataHandling();
+    }
+
+    setupMPCDataHandling() {
+        // Handle system data and auto-trigger MPC
+        this.simulinkBridge.onSimulationData = (data) => {
+            this.currentData = data;
+            this.updateDashboard(data);
+            
+            // Auto-trigger MPC if enabled
+            if (this.mpcEnabled && window.neuralMPCManager && window.neuralMPCManager.onSystemStateUpdate) {
+                window.neuralMPCManager.onSystemStateUpdate(data);
+            }
+        };
+
+        // Handle MPC results from MATLAB
+        this.simulinkBridge.onMPCResults = (mpcData) => {
+            console.log('🎯 App: Received REAL MPC results from MATLAB', mpcData);
+            
+            if (window.neuralMPCManager && window.neuralMPCManager.processRealMPCResults) {
+                window.neuralMPCManager.processRealMPCResults(mpcData);
+            }
+            
+            if (window.chartManager && mpcData.controller_performance) {
+                window.chartManager.updateMPCComparisonCharts(mpcData.controller_performance);
+                window.chartManager.updateMPCTrends(mpcData.controller_performance);
+            }
+            
+            this.updateMPCStatus('MPC experiment completed!');
+        };
+    }
+
+    setupSimulinkBridge() {
+        this.simulinkBridge.onConnect = () => {
+            console.log('✅ Connected to MATLAB PEM System');
+            this.isConnected = true;
+            this.updateConnectionStatus(true);
+            this.updateSystemStatus('Connected to MATLAB - Receiving real data');
+        };
+
+        this.simulinkBridge.onDisconnect = () => {
+            console.log('❌ Disconnected from MATLAB PEM System');
+            this.isConnected = false;
+            this.updateConnectionStatus(false);
+            this.updateSystemStatus('Disconnected from MATLAB');
+        };
+
+        this.simulinkBridge.onError = (error) => {
+            console.error('❌ MATLAB Connection Error:', error);
+            this.updateSystemStatus(`Error: ${error}`);
+        };
+    }
+
+    setupEventListeners() {
+        // Manual MPC trigger
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'manualMPCTrigger') {
+                this.triggerManualMPC();
+            }
+            if (e.target.id === 'toggleAutoMPC') {
+                this.toggleAutoMPC();
+            }
         });
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                switch(e.key) {
-                    case 'r':
-                        e.preventDefault();
-                        this.refreshData();
-                        break;
-                    case 'd':
-                        e.preventDefault();
-                        this.toggleDataView();
-                        break;
-                }
+            if (e.ctrlKey && e.key === 'm') {
+                e.preventDefault();
+                this.triggerManualMPC();
             }
         });
-
-        console.log('Event listeners initialized');
     }
 
-    setupSimulinkCallbacks() {
-        if (!this.simulinkBridge) return;
-
-        // Real simulation data callback
-        this.simulinkBridge.onSimulationData = (data) => {
-            this.handleSimulationData(data);
-        };
-
-        // MPC comparison data callback
-        this.simulinkBridge.onMPCComparison = (comparisonData) => {
-            this.handleMPCComparisonData(comparisonData);
-        };
-
-        // Simulation status callback
-        this.simulinkBridge.onSimulationStatus = (status) => {
-            this.updateSimulationStatus(status);
-        };
-
-        // Connection state callback
-        this.simulinkBridge.onConnectionStateChange = (connected) => {
-            this.updateConnectionStatus('simulink', connected);
-        };
-    }
-
-    async connectToSimulation() {
-        console.log('Connecting to MATLAB/Simulink simulation...');
+    triggerManualMPC() {
+        console.log('🚀 Manual MPC computation triggered');
         
-        if (this.simulinkBridge) {
-            try {
-                await this.simulinkBridge.connect();
-                this.isConnected = true;
-                this.updateConnectionStatus('simulink', true);
-                this.showNotification('Connected to MATLAB simulation', 'success');
-                
-                // Start simulation automatically
-                setTimeout(() => {
-                    this.simulinkBridge.startSimulation();
-                }, 1000);
-                
-            } catch (error) {
-                console.warn('Simulink connection failed, using fallback:', error);
-                this.isConnected = false;
-            }
+        if (!this.isConnected) {
+            this.updateMPCStatus('Error: Not connected to MATLAB');
+            return;
+        }
+
+        if (!this.currentData) {
+            this.updateMPCStatus('Error: No system data available');
+            return;
+        }
+
+        this.updateMPCStatus('Computing MPC controls...');
+
+        if (window.neuralMPCManager && window.neuralMPCManager.triggerMPCComputation) {
+            window.neuralMPCManager.triggerMPCComputation();
         } else {
-            throw new Error('Simulink bridge not available');
+            // Fallback: Direct MPC computation
+            this.computeFallbackMPC();
         }
     }
 
-    handleSimulationData(simulationData) {
-        console.log('📊 Received simulation data:', simulationData);
+    computeFallbackMPC() {
+        console.log('🔄 Using fallback MPC computation');
         
-        this.dataPointsReceived++;
-        this.simulationData = simulationData;
-        this.currentData = simulationData;
-        
-        // Update charts with real simulation data
-        if (this.chartManager) {
-            this.chartManager.updateAllChartsWithSimulationData(this.currentData);
-        }
-        
-        // Update UI
-        this.updateDashboard(this.currentData);
-        this.updateLiveDataFeed(this.currentData);
-        this.updateSystemMetrics(this.currentData);
-        
-        // Update data points counter
-        this.updateDataPointsCount();
+        const mpcControls = {
+            he_nmpc: { 
+                control_action: { 
+                    current: Math.max(100, Math.min(200, this.currentData.current + (Math.random() - 0.5) * 20)),
+                    voltage: Math.max(1.8, Math.min(2.4, 2.1 + (Math.random() - 0.5) * 0.1))
+                } 
+            },
+            traditional: { 
+                control_action: { 
+                    current: Math.max(100, Math.min(200, this.currentData.current * 0.95)),
+                    voltage: Math.max(1.8, Math.min(2.4, 2.08))
+                } 
+            },
+            stochastic: { 
+                control_action: { 
+                    current: Math.max(100, Math.min(200, this.currentData.current + 5)),
+                    voltage: Math.max(1.8, Math.min(2.4, 2.12))
+                } 
+            },
+            mixed_integer: { 
+                control_action: { 
+                    current: 150,
+                    voltage: 2.1
+                } 
+            }
+        };
+
+        this.simulinkBridge.sendMPCCommand('apply_controls', {
+            system_state: this.prepareSystemState(this.currentData),
+            mpc_controls: mpcControls,
+            timestamp: new Date().toISOString()
+        });
+
+        this.updateMPCStatus('MPC controls sent to MATLAB!');
     }
 
-    handleMPCComparisonData(comparisonData) {
-        console.log('📈 Received MPC comparison data:', comparisonData);
-        
-        // Update performance chart with real MPC comparison data
-        if (this.chartManager) {
-            this.chartManager.updatePerformanceChart(
-                comparisonData.heNmpc,
-                comparisonData.traditional
-            );
-        }
-        
-        // Update analytics metrics
-        this.updateAnalyticsMetrics(comparisonData);
+    prepareSystemState(systemData) {
+        return {
+            o2_production: systemData.o2Production || 40,
+            efficiency: systemData.efficiency || 75,
+            current_temp: systemData.stackTemperature || 65,
+            safety_margin: systemData.safetyMargin || 90,
+            voltage: systemData.voltage || 2.1,
+            current: systemData.current || 150,
+            pressure: systemData.pressure || 30,
+            flow_rate: systemData.flowRate || 45,
+            purity: systemData.purity || 99.5,
+            power_consumption: systemData.powerConsumption || 3.8
+        };
+    }
+
+    toggleAutoMPC() {
+        this.mpcEnabled = !this.mpcEnabled;
+        const status = this.mpcEnabled ? 'ENABLED' : 'DISABLED';
+        this.updateMPCStatus(`Auto MPC ${status}`);
+        console.log(`🔧 Auto MPC: ${status}`);
     }
 
     updateDashboard(data) {
-        // Update main metrics with real data
-        this.updateMetricValue('productionValue', data.o2Production, '%');
-        this.updateMetricValue('efficiencyValue', data.efficiency, '%');
-        this.updateMetricValue('safetyValue', data.safetyMargin, '%');
-        this.updateMetricValue('temperatureValue', data.stackTemperature, '°C');
+        this.updateMetric('o2Production', data.o2Production, 'L/min');
+        this.updateMetric('efficiency', data.efficiency, '%');
+        this.updateMetric('stackTemperature', data.stackTemperature, '°C');
+        this.updateMetric('safetyMargin', data.safetyMargin, '%');
+        this.updateMetric('voltage', data.voltage, 'V');
+        this.updateMetric('current', data.current, 'A');
+        this.updateMetric('pressure', data.pressure, 'bar');
+        this.updateMetric('flowRate', data.flowRate, 'L/min');
+        this.updateMetric('purity', data.purity, '%');
+        this.updateMetric('powerConsumption', data.powerConsumption, 'kW');
     }
 
-    updateMetricValue(elementId, value, suffix = '') {
-        const element = document.getElementById(elementId);
-        if (element && value !== undefined && value !== null) {
-            element.textContent = value.toFixed(1) + suffix;
-            
-            // Add animation effect for live data
-            element.style.transform = 'scale(1.05)';
-            setTimeout(() => {
-                element.style.transform = 'scale(1)';
-            }, 200);
-        }
-    }
-
-    updateLiveDataFeed(data) {
-        // Update live data display with real values
-        this.updateLiveValue('liveO2Production', data.o2Production, '%');
-        this.updateLiveValue('liveEfficiency', data.efficiency, '%');
-        this.updateLiveValue('liveTemperature', data.stackTemperature, '°C');
-        this.updateLiveValue('livePower', data.powerConsumption, 'kW');
-
-        // Update Simulink tab real-time data
-        this.updateLiveValue('simO2Production', data.o2Production, ' L/min');
-        this.updateLiveValue('simStackTemp', data.stackTemperature, '°C');
-        this.updateLiveValue('simEfficiency', data.efficiency, '%');
-        this.updateLiveValue('simPower', data.powerConsumption, 'kW');
-    }
-
-    updateLiveValue(elementId, value, suffix = '') {
-        const element = document.getElementById(elementId);
-        if (element && value !== undefined && value !== null) {
-            const formattedValue = typeof value === 'number' ? value.toFixed(1) : value;
-            element.textContent = formattedValue + suffix;
-        }
-    }
-
-    updateSystemMetrics(data) {
-        // Update system status with real data
-        this.updateStatusBadge('controllerMode', 'HE-NMPC', 'success');
-        this.updateStatusBadge('operationMode', this.isConnected ? 'LIVE' : 'SIMULATION', 'info');
-        this.updateStatusBadge('safetyViolations', '0', 'success');
-        this.updateStatusBadge('simulinkStatus', this.isConnected ? 'Connected' : 'Fallback', 
-                              this.isConnected ? 'success' : 'warning');
-    }
-
-    updateStatusBadge(elementId, text, type) {
+    updateMetric(elementId, value, unit) {
         const element = document.getElementById(elementId);
         if (element) {
-            element.textContent = text;
-            element.className = `status-badge ${type}`;
+            const formattedValue = typeof value === 'number' ? value.toFixed(1) : value;
+            element.textContent = `${formattedValue} ${unit}`;
         }
     }
 
-    updateAnalyticsMetrics(comparisonData) {
-        // Update real MPC performance metrics in analytics tab
-        const metricsContainer = document.querySelector('.metrics-comparison');
-        if (metricsContainer && comparisonData.metrics) {
-            const metrics = comparisonData.metrics;
-            
-            // Update settling time
-            this.updateComparisonMetric(metricsContainer, 1, metrics.settlingTime, 's');
-            
-            // Update overshoot
-            this.updateComparisonMetric(metricsContainer, 2, metrics.overshoot, '%');
-            
-            // Update efficiency
-            this.updateComparisonMetric(metricsContainer, 3, metrics.efficiency, '%');
-            
-            // Update constraint violations
-            this.updateComparisonMetric(metricsContainer, 4, metrics.constraintViolations, '%');
-        }
-    }
-
-    updateComparisonMetric(container, index, data, unit) {
-        const element = container.querySelector(`.metric-comparison-item:nth-child(${index}) .metric-value`);
-        if (element && data) {
-            element.textContent = `${data.heNmpc}${unit} / ${data.traditional}${unit}`;
-        }
-    }
-
-    updateDataPointsCount() {
-        const countElement = document.getElementById('dataPointsCount');
-        if (countElement) {
-            countElement.textContent = this.dataPointsReceived;
-        }
-    }
-
-    updateSimulationStatus(status) {
-        if (window.navigationManager) {
-            window.navigationManager.updateSimulinkStatus(status.status || 'running');
-        }
-        
-        // Update simulation time
-        if (status.simulationTime !== undefined) {
-            const simTimeElement = document.getElementById('simTime');
-            if (simTimeElement) {
-                simTimeElement.textContent = `${status.simulationTime} s`;
-            }
-        }
-        
-        // Update data rate
-        if (status.dataRate !== undefined) {
-            const dataRateElement = document.getElementById('dataRate');
-            if (dataRateElement) {
-                dataRateElement.textContent = `${status.dataRate.toFixed(1)} Hz`;
-            }
-        }
-
-        // Update last update time
-        const lastUpdateElement = document.getElementById('simulinkLastUpdate');
-        if (lastUpdateElement) {
-            const now = new Date();
-            lastUpdateElement.textContent = now.toLocaleTimeString('en-US', {
-                hour12: false,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-        }
-    }
-
-    updateConnectionStatus(component, connected) {
+    updateConnectionStatus(connected) {
         const statusElement = document.getElementById('connectionStatus');
-        const textElement = document.getElementById('connectionText');
-        
-        if (statusElement && textElement) {
-            if (connected) {
-                statusElement.className = 'status-dot connected';
-                textElement.textContent = 'Connected to MATLAB';
-            } else {
-                statusElement.className = 'status-dot disconnected';
-                textElement.textContent = 'Fallback Mode';
-            }
+        if (statusElement) {
+            statusElement.textContent = connected ? '✅ Connected' : '❌ Disconnected';
+            statusElement.style.color = connected ? '#10b981' : '#ef4444';
         }
     }
 
-    updateSystemStatus() {
-        const systemStatusElement = document.getElementById('systemStatus');
-        if (systemStatusElement) {
-            systemStatusElement.textContent = this.isConnected ? 
-                'System Live - Receiving MATLAB Data' : 'System Running - Simulation Mode';
+    updateSystemStatus(message) {
+        const statusElement = document.getElementById('systemStatus');
+        if (statusElement) {
+            statusElement.textContent = message;
         }
     }
 
-    handleControlAction(action) {
-        console.log('Control action triggered:', action);
-        
-        switch(action) {
-            case 'start':
-                this.sendControlCommand('start');
-                this.showNotification('Sending START command to system...', 'info');
-                break;
-            case 'stop':
-                this.sendControlCommand('stop');
-                this.showNotification('Sending STOP command to system...', 'warning');
-                break;
-            case 'reset':
-                this.sendControlCommand('reset');
-                this.showNotification('Sending RESET command to system...', 'info');
-                break;
-            case 'emergency':
-                this.sendControlCommand('emergency_stop');
-                this.showNotification('EMERGENCY STOP ACTIVATED!', 'error');
-                break;
+    updateMPCStatus(message) {
+        const statusElement = document.getElementById('mpcStatus');
+        if (statusElement) {
+            statusElement.textContent = `Status: ${message}`;
+            statusElement.style.color = message.includes('Error') ? '#ef4444' : 
+                                      message.includes('completed') ? '#10b981' : '#3b82f6';
         }
     }
 
-    sendControlCommand(command) {
-        // Send command to real system via MQTT or Simulink
-        if (this.simulinkBridge) {
-            try {
-                this.simulinkBridge.sendCommand(command);
-            } catch (error) {
-                console.error('Failed to send command:', error);
-            }
-        }
+    // Public method for external access
+    getCurrentData() {
+        return this.currentData;
     }
 
-    showNotification(message, type = 'info') {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.innerHTML = `
-            <div class="notification-content">
-                <span class="notification-message">${message}</span>
-                <button class="notification-close">&times;</button>
-            </div>
-        `;
-        
-        // Add to notification container
-        let container = document.getElementById('notification-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'notification-container';
-            container.className = 'notification-container';
-            document.body.appendChild(container);
-        }
-        
-        container.appendChild(notification);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.style.animation = 'slideOut 0.3s ease forwards';
-                setTimeout(() => notification.remove(), 300);
-            }
-        }, 5000);
-        
-        // Close button handler
-        notification.querySelector('.notification-close').addEventListener('click', () => {
-            notification.remove();
-        });
-    }
-
-    refreshData() {
-        console.log('Manual data refresh requested');
-        this.showNotification('Refreshing data from system...', 'info');
-        
-        // Request latest data from system
-        if (this.simulinkBridge) {
-            this.simulinkBridge.sendCommand('refresh_data');
-        }
-    }
-
-    toggleDataView() {
-        // Toggle between different data views
-        console.log('Data view toggled');
-        this.showNotification('Data view changed', 'info');
-    }
-
-    // Method to manually trigger test data
-    injectTestData() {
-        if (this.simulinkBridge && typeof this.simulinkBridge.injectTestData === 'function') {
-            this.simulinkBridge.injectTestData();
-            this.showNotification('Test data injected for chart verification', 'info');
-        }
-    }
-
-    // Public method to get current system state
-    getSystemState() {
-        return {
-            connected: this.isConnected,
-            currentData: this.currentData,
-            dataPointsReceived: this.dataPointsReceived,
-            lastUpdate: this.currentData ? this.currentData.timestamp : null
-        };
-    }
-
-    // Cleanup method
-    destroy() {
-        if (this.simulinkBridge) {
-            this.simulinkBridge.stopSimulation();
-        }
-        console.log('Electrolyzer app cleaned up');
+    isMPCEnabled() {
+        return this.mpcEnabled;
     }
 }
 
-// Initialize application when DOM is fully loaded
+// Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     window.electrolyzerApp = new ElectrolyzerApp();
     
-    // Add global method for testing
-    window.injectTestData = function() {
+    // Global functions for manual control
+    window.runMPCExperiment = function() {
         if (window.electrolyzerApp) {
-            window.electrolyzerApp.injectTestData();
+            window.electrolyzerApp.triggerManualMPC();
         }
     };
-});
-
-// Handle page unload
-window.addEventListener('beforeunload', function() {
-    if (window.electrolyzerApp) {
-        window.electrolyzerApp.destroy();
-    }
+    
+    window.toggleAutoMPC = function() {
+        if (window.electrolyzerApp) {
+            window.electrolyzerApp.toggleAutoMPC();
+        }
+    };
+    
+    console.log('🚀 PEM Electrolyzer App Ready!');
+    console.log('   Use runMPCExperiment() to trigger MPC manually');
+    console.log('   Use toggleAutoMPC() to enable/disable auto computation');
 });
