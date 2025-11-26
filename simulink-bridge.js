@@ -1,415 +1,297 @@
-// simulink-bridge.js - Real MATLAB/Simulink Integration for PEM Electrolyzer
+// simulink-bridge.js - COMPLETE FIXED VERSION
 class SimulinkBridge {
     constructor() {
+        this.mqttClient = null;
         this.isConnected = false;
-        this.simulationRunning = false;
-        this.dataCallbacks = [];
-        this.connectionUrl = 'ws://localhost:8080'; // MATLAB WebSocket server
-        this.socket = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
-
+        this.reconnectInterval = 3000;
+        
         // Callbacks
+        this.onConnect = null;
+        this.onDisconnect = null;
+        this.onError = null;
         this.onSimulationData = null;
-        this.onMPCComparison = null;
-        this.onSimulationStatus = null;
-
+        this.onMPCResults = null;
+        
         this.init();
     }
 
     init() {
-        console.log('Simulink Bridge Initializing for PEM Electrolyzer...');
-        this.setupWebSocket();
+        console.log('🔌 Simulink Bridge Initializing...');
+        this.connectToMQTT();
     }
 
-    setupWebSocket() {
+    connectToMQTT() {
         try {
-            this.socket = new WebSocket(this.connectionUrl);
+            console.log('📡 Connecting to MQTT broker...');
             
-            this.socket.onopen = () => {
-                console.log('✅ Connected to MATLAB/Simulink WebSocket');
-                this.isConnected = true;
-                this.reconnectAttempts = 0;
-                if (this.onConnectionStateChange) {
-                    this.onConnectionStateChange(true);
-                }
-            };
-            
-            this.socket.onmessage = (event) => {
-                console.log('📨 Received data from MATLAB:', event.data);
-                this.handleSimulinkMessage(event.data);
-            };
-            
-            this.socket.onclose = () => {
-                console.log('❌ Disconnected from MATLAB/Simulink');
+            // Use HiveMQ public broker
+            this.mqttClient = new Paho.MQTT.Client(
+                'broker.hivemq.com',
+                8000,
+                'web_client_' + Math.random().toString(16).substr(2, 8)
+            );
+
+            // Set callback handlers
+            this.mqttClient.onConnectionLost = (response) => {
+                console.log('❌ MQTT Connection lost:', response.errorMessage);
                 this.isConnected = false;
-                this.simulationRunning = false;
-                if (this.onConnectionStateChange) {
-                    this.onConnectionStateChange(false);
-                }
-                
-                // Attempt reconnection
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.reconnectAttempts++;
-                    console.log(`Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts}...`);
-                    setTimeout(() => this.setupWebSocket(), 3000);
-                }
+                this.handleDisconnection();
             };
-            
-            this.socket.onerror = (error) => {
-                console.error('WebSocket error:', error);
+
+            this.mqttClient.onMessageArrived = (message) => {
+                this.handleMessage(message);
             };
-            
+
+            // Connect the client
+            const connectOptions = {
+                onSuccess: () => {
+                    console.log('✅ MQTT Connection established');
+                    this.isConnected = true;
+                    this.reconnectAttempts = 0;
+                    this.subscribeToTopics();
+                    
+                    if (this.onConnect) {
+                        this.onConnect();
+                    }
+                },
+                onFailure: (error) => {
+                    console.error('❌ MQTT Connection failed:', error.errorMessage);
+                    this.isConnected = false;
+                    this.handleConnectionFailure();
+                },
+                useSSL: true,
+                timeout: 3,
+                keepAliveInterval: 60,
+                cleanSession: true
+            };
+
+            this.mqttClient.connect(connectOptions);
+
         } catch (error) {
-            console.error('WebSocket setup failed:', error);
-            this.fallbackToMQTT();
+            console.error('❌ MQTT Initialization error:', error);
+            this.handleConnectionFailure();
         }
     }
 
-    handleSimulinkMessage(message) {
-        try {
-            const data = JSON.parse(message);
-            console.log('Parsed MATLAB data:', data);
-            
-            switch(data.type) {
-                case 'simulation_data':
-                    if (this.onSimulationData) {
-                        this.onSimulationData(data.payload);
-                    }
-                    break;
-                    
-                case 'mpc_comparison':
-                    if (this.onMPCComparison) {
-                        this.onMPCComparison(data.payload);
-                    }
-                    break;
-                    
-                case 'simulation_status':
-                    if (this.onSimulationStatus) {
-                        this.onSimulationStatus(data.payload);
-                    }
-                    break;
+    subscribeToTopics() {
+        if (!this.mqttClient || !this.isConnected) {
+            console.warn('⚠️ Cannot subscribe: MQTT not connected');
+            return;
+        }
 
-                case 'electrolyzer_data':
-                    // Direct electrolyzer data from your MATLAB system
-                    this.processElectrolyzerData(data.payload);
+        try {
+            // Subscribe to MATLAB system data
+            this.mqttClient.subscribe('pem/electrolyzer/data');
+            console.log('✅ Subscribed to PEM system data');
+            
+            // Subscribe to MATLAB responses
+            this.mqttClient.subscribe('electrolyzer/command/response');
+            console.log('✅ Subscribed to command responses');
+            
+            // Subscribe to MPC results
+            this.mqttClient.subscribe('electrolyzer/mpc_results');
+            console.log('✅ Subscribed to MPC results');
+
+        } catch (error) {
+            console.error('❌ Subscription error:', error);
+        }
+    }
+
+    handleMessage(message) {
+        try {
+            const topic = message.destinationName;
+            const payload = message.payloadString;
+            
+            console.log(`📨 MQTT Message [${topic}]:`, payload.substring(0, 200) + '...');
+
+            // Parse JSON payload
+            let data;
+            try {
+                data = JSON.parse(payload);
+            } catch (parseError) {
+                console.error('❌ JSON Parse error:', parseError);
+                return;
+            }
+
+            // Route message based on topic
+            switch (topic) {
+                case 'pem/electrolyzer/data':
+                    this.processElectrolyzerData(data);
+                    break;
+                    
+                case 'electrolyzer/mpc_results':
+                    this.processMPCResults(data);
+                    break;
+                    
+                case 'electrolyzer/command/response':
+                    this.processCommandResponse(data);
                     break;
                     
                 default:
-                    console.log('Unknown message type:', data.type);
+                    console.log('📨 Unknown topic:', topic, data);
             }
+
         } catch (error) {
-            console.error('Error parsing Simulink message:', error);
+            console.error('❌ Message handling error:', error);
         }
     }
 
-    processElectrolyzerData(electrolyzerData) {
-        console.log('Processing electrolyzer data from MATLAB:', electrolyzerData);
-        
-        // Convert MATLAB system data to our chart format
-        const simulationData = {
-            // Production data
-            o2Production: electrolyzerData.o2_production || 0,
-            h2Production: (electrolyzerData.o2_production || 0) * 2, // H2 is roughly 2x O2
-            efficiency: electrolyzerData.efficiency || electrolyzerData.stack_efficiency || 0,
-            
-            // System parameters
-            voltage: 2.1, // Typical PEM voltage
-            current: 150, // Typical current
-            stackTemperature: electrolyzerData.current_temp || 25,
-            pressure: 35, // Typical pressure
-            flowRate: (electrolyzerData.o2_production || 0) * 0.5, // Derived
-            purity: electrolyzerData.o2_min_purity || 99.5,
-            
-            // Safety metrics
-            safetyMargin: electrolyzerData.safety_margin || 100,
-            temperatureMargin: 80 - (electrolyzerData.current_temp || 25), // Distance from max temp
-            pressureMargin: 50 - 35, // Distance from max pressure
-            
-            // Power data
-            powerConsumption: ((electrolyzerData.o2_production || 0) * 2.3), // kW based on production
-            
-            // Economic data
-            economicSetpoint: electrolyzerData.economic_setpoint || 30,
-            
-            timestamp: new Date().toISOString(),
-            source: 'matlab'
-        };
-
-        // Send to main application
-        if (this.onSimulationData) {
-            this.onSimulationData(simulationData);
-        }
-
-        // Generate MPC comparison data based on system performance
-        this.generateMPCComparisonData(simulationData);
-    }
-
-    generateMPCComparisonData(simulationData) {
-        // Generate realistic MPC performance comparison based on system data
-        const baseEfficiency = simulationData.efficiency || 75;
-        const stability = Math.min(100, simulationData.safetyMargin * 1.2);
-        
-        const mpcComparison = {
-            heNmpc: [
-                Math.min(100, baseEfficiency + 15), // Tracking Accuracy
-                Math.min(100, 85 + Math.random() * 10), // Response Speed
-                baseEfficiency, // Energy Efficiency
-                stability, // Constraint Handling
-                Math.min(100, stability - 5), // Robustness
-                Math.min(100, 70 + Math.random() * 15) // Computational Speed
-            ],
-            traditional: [
-                Math.min(100, baseEfficiency + 5), // Tracking Accuracy
-                Math.min(100, 65 + Math.random() * 10), // Response Speed
-                Math.max(60, baseEfficiency - 10), // Energy Efficiency
-                Math.max(70, stability - 15), // Constraint Handling
-                Math.max(65, stability - 20), // Robustness
-                Math.min(100, 85 + Math.random() * 10) // Computational Speed
-            ],
-            metrics: {
-                settlingTime: {
-                    heNmpc: (2.0 + Math.random() * 0.5).toFixed(1),
-                    traditional: (3.5 + Math.random() * 0.5).toFixed(1)
-                },
-                overshoot: {
-                    heNmpc: (3.0 + Math.random() * 2).toFixed(1),
-                    traditional: (10.0 + Math.random() * 5).toFixed(1)
-                },
-                efficiency: {
-                    heNmpc: baseEfficiency.toFixed(1),
-                    traditional: Math.max(60, baseEfficiency - 10).toFixed(1)
-                },
-                constraintViolations: {
-                    heNmpc: (0.1 + Math.random() * 0.2).toFixed(1),
-                    traditional: (2.5 + Math.random() * 1.0).toFixed(1)
-                }
-            }
-        };
-
-        if (this.onMPCComparison) {
-            this.onMPCComparison(mpcComparison);
-        }
-    }
-
-    // Public methods for external use
-    async connect() {
-        return new Promise((resolve, reject) => {
-            if (this.isConnected) {
-                resolve();
-                return;
-            }
-            
-            const checkConnection = setInterval(() => {
-                if (this.isConnected) {
-                    clearInterval(checkConnection);
-                    resolve();
-                }
-            }, 100);
-            
-            setTimeout(() => {
-                clearInterval(checkConnection);
-                this.fallbackToMQTT();
-                resolve(); // Resolve anyway to allow fallback
-            }, 5000);
-        });
-    }
-
-    startSimulation() {
-        if (this.isConnected) {
-            this.sendCommand('start_simulation');
-        } else {
-            console.log('WebSocket not connected, using fallback simulation');
-            this.startFallbackSimulation();
-        }
-        this.simulationRunning = true;
-    }
-
-    stopSimulation() {
-        if (this.isConnected) {
-            this.sendCommand('stop_simulation');
-        }
-        this.simulationRunning = false;
-        this.stopFallbackSimulation();
-    }
-
-    updateParameters(parameters) {
-        if (this.isConnected) {
-            this.sendCommand('update_parameters', parameters);
-        } else {
-            console.log('WebSocket not connected, parameters:', parameters);
-        }
-    }
-
-    emergencyStop() {
-        if (this.isConnected) {
-            this.sendCommand('emergency_stop');
-        }
-        this.simulationRunning = false;
-        this.stopFallbackSimulation();
-    }
-
-    sendCommand(command, payload = {}) {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            const message = {
-                type: 'command',
-                command: command,
-                payload: payload,
-                timestamp: new Date().toISOString()
-            };
-            
-            this.socket.send(JSON.stringify(message));
-        } else {
-            console.warn('WebSocket not connected, command not sent:', command);
-        }
-    }
-
-    // Fallback methods when WebSocket is not available
-    fallbackToMQTT() {
-        console.log('Falling back to MQTT for data simulation');
-        this.startFallbackSimulation();
-    }
-
-    startFallbackSimulation() {
-        console.log('Starting fallback simulation data stream');
-        
-        // Simulate data from MATLAB system
-        this.fallbackInterval = setInterval(() => {
-            const simulatedData = {
-                o2_production: 30 + Math.random() * 20,
-                efficiency: 75 + Math.random() * 10,
-                current_temp: 25 + Math.random() * 15,
-                safety_margin: 80 + Math.random() * 20,
-                stack_efficiency: 75,
-                o2_min_purity: 99.5,
-                economic_setpoint: 30,
-                simulation_time: Date.now() / 1000
-            };
-            
-            this.processElectrolyzerData(simulatedData);
-            
-            // Update simulation status
-            if (this.onSimulationStatus) {
-                this.onSimulationStatus({
-                    status: 'running',
-                    simulationTime: (Date.now() / 1000).toFixed(1),
-                    dataRate: 2.0
-                });
-            }
-            
-        }, 2000); // Update every 2 seconds
-    }
-
-    stopFallbackSimulation() {
-        if (this.fallbackInterval) {
-            clearInterval(this.fallbackInterval);
-            this.fallbackInterval = null;
-        }
-    }
-
-    onConnectionStateChange(connected) {
-        // Override this method to handle connection state changes
-        console.log('Connection state changed:', connected ? 'Connected' : 'Disconnected');
-    }
-
-    // Method to manually inject test data
-    injectTestData() {
-        console.log('Injecting test data for chart verification');
-        
-        const testData = {
-            o2_production: 45.7,
-            efficiency: 78.3,
-            current_temp: 65.2,
-            safety_margin: 95.8,
-            stack_efficiency: 78.3,
-            o2_min_purity: 99.7,
-            economic_setpoint: 35,
-            simulation_time: Date.now() / 1000
-        };
-        
-        this.processElectrolyzerData(testData);
-    }
-      // ADD THESE METHODS:
-    sendMPCCommand(command, data) {
-        const mpcMessage = {
-            mpc_command: command,
-            ...data,
-            source: 'web_mpc_controller',
-            timestamp: new Date().toISOString()
-        };
-        
-        this.sendCommand('mpc_control', mpcMessage);
-        console.log('🎯 MPC Command sent to MATLAB:', command, data);
-    }
-
-    processMPCResults(data) {
-        console.log('📊 MPC Results from MATLAB:', data);
-        
-        // Forward to neural MPC manager
-        if (window.neuralMPCManager && window.neuralMPCManager.onMPCFeedback) {
-            window.neuralMPCManager.onMPCFeedback(data);
-        }
-        
-        // Update charts with MPC data
-        if (window.chartManager) {
-            window.chartManager.updateMPCData(data);
-        }
-    }
-     // ... existing code ...
-    
-    // ADD MPC COMMAND METHOD
-    sendMPCCommand(command, data) {
-        const message = {
-            mpc_command: command,
-            ...data,
-            source: 'web_mpc_frontend',
-            timestamp: new Date().toISOString()
-        };
-        
-        this.sendCommand('apply_controls', message);
-        console.log('🚀 MPC Command sent to MATLAB:', command, data);
-    }
-    
-    // Ensure this method exists for receiving MPC results
     processElectrolyzerData(rawData) {
-        console.log('Processing data from MATLAB:', rawData);
+        console.log('🔧 Processing PEM system data from MATLAB...');
         
         // Check if this is MPC results
         if (rawData.mpc_results && rawData.controller_performance) {
             console.log('🎯 Received REAL MPC results from PEM');
             
-            // Process as MPC results
             if (this.onMPCResults) {
                 this.onMPCResults(rawData);
             }
             
-            // Also update charts
-            if (window.chartManager && window.chartManager.updateMPCComparisonCharts) {
-                window.chartManager.updateMPCComparisonCharts(rawData.controller_performance);
-            }
-        } else {
-            // Process as regular system data
-            const processedData = {
-                o2Production: rawData.o2_production,
-                efficiency: rawData.efficiency,
-                stackTemperature: rawData.current_temp,
-                safetyMargin: rawData.safety_margin,
-                voltage: rawData.voltage,
-                current: rawData.current,
-                pressure: rawData.pressure,
-                flowRate: rawData.flow_rate,
-                purity: rawData.purity,
-                powerConsumption: rawData.power_consumption,
-                timestamp: rawData.timestamp
+            return;
+        }
+
+        // Process as regular system data
+        const processedData = {
+            o2Production: rawData.o2_production,
+            efficiency: rawData.efficiency,
+            stackTemperature: rawData.current_temp,
+            safetyMargin: rawData.safety_margin,
+            voltage: rawData.voltage,
+            current: rawData.current,
+            pressure: rawData.pressure,
+            flowRate: rawData.flow_rate,
+            purity: rawData.purity,
+            powerConsumption: rawData.power_consumption,
+            simulationTime: rawData.simulation_time,
+            timestamp: rawData.timestamp,
+            source: rawData.source
+        };
+
+        console.log('📊 Processed system data:', {
+            o2: processedData.o2Production?.toFixed(1),
+            eff: processedData.efficiency?.toFixed(1),
+            temp: processedData.stackTemperature?.toFixed(1)
+        });
+
+        if (this.onSimulationData) {
+            this.onSimulationData(processedData);
+        }
+    }
+
+    processMPCResults(mpcData) {
+        console.log('🎯 Processing MPC results from MATLAB:', mpcData);
+        
+        if (this.onMPCResults) {
+            this.onMPCResults(mpcData);
+        }
+        
+        // Also update charts directly if available
+        if (window.chartManager && mpcData.controller_performance) {
+            window.chartManager.updateMPCComparisonCharts(mpcData.controller_performance);
+        }
+    }
+
+    processCommandResponse(response) {
+        console.log('📨 Command response from MATLAB:', response);
+        // Handle command responses if needed
+    }
+
+    // Send commands to MATLAB
+    sendCommand(command, data) {
+        if (!this.isConnected || !this.mqttClient) {
+            console.error('❌ Cannot send command: MQTT not connected');
+            return false;
+        }
+
+        try {
+            const message = {
+                command: command,
+                ...data,
+                timestamp: new Date().toISOString(),
+                source: 'web_frontend'
             };
+
+            const jsonMessage = JSON.stringify(message);
+            const mqttMessage = new Paho.MQTT.Message(jsonMessage);
+            mqttMessage.destinationName = 'electrolyzer/control';
             
-            if (this.onSimulationData) {
-                this.onSimulationData(processedData);
+            this.mqttClient.send(mqttMessage);
+            console.log('📤 Command sent to MATLAB:', command, data);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Command send error:', error);
+            return false;
+        }
+    }
+
+    // Send MPC commands to MATLAB
+    sendMPCCommand(command, mpcData) {
+        console.log('🚀 Sending MPC command to MATLAB:', command);
+        
+        const message = {
+            mpc_command: command,
+            ...mpcData,
+            source: 'web_mpc_frontend',
+            timestamp: new Date().toISOString()
+        };
+        
+        return this.sendCommand('apply_controls', message);
+    }
+
+    // Connection management
+    handleDisconnection() {
+        if (this.onDisconnect) {
+            this.onDisconnect();
+        }
+        this.attemptReconnection();
+    }
+
+    handleConnectionFailure() {
+        this.reconnectAttempts++;
+        
+        if (this.reconnectAttempts <= this.maxReconnectAttempts) {
+            console.log(`🔄 Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectInterval/1000}s...`);
+            setTimeout(() => this.connectToMQTT(), this.reconnectInterval);
+        } else {
+            console.error('❌ Max reconnection attempts reached');
+            if (this.onError) {
+                this.onError('Max reconnection attempts reached');
             }
         }
     }
 
-    
+    attemptReconnection() {
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            console.log(`🔄 Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+            setTimeout(() => this.connectToMQTT(), this.reconnectInterval);
+        } else {
+            console.error('❌ Maximum reconnection attempts reached');
+            if (this.onError) {
+                this.onError('Connection lost - maximum reconnection attempts reached');
+            }
+        }
+    }
+
+    disconnect() {
+        if (this.mqttClient && this.isConnected) {
+            this.mqttClient.disconnect();
+            this.isConnected = false;
+            console.log('🔌 MQTT Disconnected');
+        }
+    }
+
+    // Utility methods
+    getConnectionStatus() {
+        return this.isConnected;
+    }
+
+    getReconnectAttempts() {
+        return this.reconnectAttempts;
+    }
 }
 
 // Make available globally
