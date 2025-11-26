@@ -11,7 +11,8 @@ class NeuralMPCManager {
         this.realResults = [];
         this.lastComputationTime = 0;
         this.computationInterval = 15000; // Compute every 15 seconds
-        this.isConnected = false;
+        this.autoCompute = true;
+        this.isInitialized = false;
         
         this.init();
     }
@@ -52,24 +53,13 @@ class NeuralMPCManager {
             this.onSystemStateUpdate(data);
         };
 
-        // Add MPC command capability to bridge
-        bridge.sendMPCCommand = (command, mpcData) => {
-            const message = {
-                mpc_command: command,
-                ...mpcData,
-                source: 'web_mpc_frontend',
-                timestamp: new Date().toISOString()
-            };
-            
-            bridge.sendCommand('apply_controls', message);
-            console.log('🚀 MPC Command sent to MATLAB:', command);
-        };
-
-        this.isConnected = true;
+        this.isInitialized = true;
         console.log('✅ Neural MPC connected to MATLAB bridge - Auto-computing every 15 seconds');
     }
 
     onSystemStateUpdate(systemData) {
+        if (!this.autoCompute) return;
+        
         const now = Date.now();
         
         // Auto-compute MPC every 15 seconds
@@ -93,13 +83,17 @@ class NeuralMPCManager {
             const mpcControls = await this.computeAllMPC(systemData);
             
             // Send to PEM for REAL testing
-            window.electrolyzerApp.simulinkBridge.sendMPCCommand('apply_controls', {
-                system_state: this.prepareSystemState(systemData),
-                mpc_controls: mpcControls,
-                timestamp: new Date().toISOString()
-            });
-            
-            console.log('🚀 MPC controls sent to MATLAB');
+            if (window.electrolyzerApp && window.electrolyzerApp.simulinkBridge) {
+                window.electrolyzerApp.simulinkBridge.sendMPCCommand('apply_controls', {
+                    system_state: this.prepareSystemState(systemData),
+                    mpc_controls: mpcControls,
+                    timestamp: new Date().toISOString()
+                });
+                
+                console.log('🚀 MPC controls sent to MATLAB');
+            } else {
+                console.error('❌ Cannot send MPC: Simulink bridge not available');
+            }
             
         } catch (error) {
             console.error('❌ MPC computation failed:', error);
@@ -208,6 +202,9 @@ class NeuralMPCManager {
         Object.entries(performance).forEach(([mpcName, perf]) => {
             this.updateMPCCardWithRealData(mpcName, perf);
         });
+        
+        // Highlight best performer
+        this.highlightBestPerformer(performance);
     }
 
     updateMPCCardWithRealData(mpcName, realPerformance) {
@@ -229,9 +226,6 @@ class NeuralMPCManager {
         if (stabilityEl) stabilityEl.textContent = `${realPerformance.stability_index?.toFixed(1) || '--'}%`;
         if (scoreEl) scoreEl.textContent = `${realPerformance.performance_score?.toFixed(1) || '--'}`;
         if (costEl) costEl.textContent = `${realPerformance.control_cost?.toFixed(3) || '--'}`;
-
-        // Highlight best performer
-        this.highlightBestPerformer(performance);
     }
 
     highlightBestPerformer(performance) {
@@ -374,13 +368,6 @@ class RealPEMModel {
         const currentMargin = Math.max(0, (200 - Math.abs(current)) / 200 * 100);
         
         return Math.min(tempMargin, currentMargin);
-    }
-
-    calculateCost(controlAction, performance) {
-        // Economic cost calculation
-        const energyCost = controlAction.current * controlAction.voltage * 0.12 / 1000; // $0.12/kWh
-        const efficiencyBonus = (performance.efficiency - 75) * 0.1; // Bonus for high efficiency
-        return Math.max(0, energyCost - efficiencyBonus);
     }
 }
 
@@ -759,14 +746,6 @@ class RealMixedIntegerMPC {
 
 // Initialize Neural MPC Manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    window.neuralMPCManager = new NeuralMPCManager();
-    
-    // Add global function for manual triggering
-    window.runMPCExperiment = function() {
-        if (window.neuralMPCManager) {
-            window.neuralMPCManager.triggerMPCComputation();
-        }
-    };
-    
-    console.log('🚀 Neural MPC Manager Ready - Use runMPCExperiment() to trigger manually');
+    // It will be initialized by ElectrolyzerApp
+    console.log('🧠 Neural MPC system ready for initialization');
 });
