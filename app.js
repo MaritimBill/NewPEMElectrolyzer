@@ -1,94 +1,48 @@
-// app.js - ENHANCED WITH NEURAL API ROUTES
+// app.js - ENHANCED FOR MPC COMPARISON DASHBOARD
 const express = require('express');
 const mqttClient = require('./mqtt');
 const RealKenyaNeuralMPC = require('./neural-mpc');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
+app.use(express.static('public'));
 
-// Initialize Neural MPC
 const neuralMPC = new RealKenyaNeuralMPC();
 
-// NEURAL MPC API ROUTES
-app.get('/api/neural/optimize', async (req, res) => {
+// MPC COMPARISON API ROUTES
+app.get('/api/mpc/compare', async (req, res) => {
     try {
-        console.log('🧠 Neural MPC Optimization Request');
+        console.log('🧠 MPC Comparison Request');
         const results = await neuralMPC.runCompleteSystem();
-        
-        // Send to MATLAB via MQTT
-        mqttClient.sendToMATLAB({
-            command: 'apply_neural_control',
-            optimal_current: results.training.targets.optimal_current,
-            timestamp: new Date().toISOString(),
-            source: 'web_neural_mpc'
-        });
-        
-        res.json({
-            status: 'optimization_complete',
-            optimal_control: results.training.targets,
-            real_data: {
-                weather: results.weather.current,
-                electricity: results.electricity,
-                hospital: results.hospital
-            }
-        });
+        res.json(results);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.post('/api/neural/control', async (req, res) => {
-    try {
-        const { current, efficiency, mode } = req.body;
-        
-        // Send direct control to MATLAB
-        mqttClient.sendToMATLAB({
-            command: 'manual_control',
-            control_action: { current, efficiency, mode },
-            timestamp: new Date().toISOString()
-        });
-        
-        res.json({ status: 'control_sent', current, mode });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// SYSTEM STATUS ROUTES
-app.get('/api/system/status', async (req, res) => {
+app.get('/api/mpc/status', async (req, res) => {
     const status = {
-        neural_mpc: 'active',
-        matlab_bridge: 'connected',
-        arduino: 'ready',
-        timestamp: new Date().toISOString(),
-        location: 'KNH Nairobi'
+        system: 'active',
+        mpc_algorithms: ['HE-NMPC', 'Standard-MPC', 'MixedInteger-MPC', 'Stochastic-MPC', 'HEMPC'],
+        data_sources: {
+            weather: 'active',
+            electricity: 'active', 
+            hospital: 'active'
+        },
+        timestamp: new Date().toISOString()
     };
     res.json(status);
 });
 
-app.get('/api/data/current', async (req, res) => {
-    try {
-        const currentData = await neuralMPC.generateRealTrainingData();
-        res.json(currentData);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+// Serve MPC Comparison Dashboard
+app.get('/mpc-dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'mpc-dashboard.html'));
 });
 
-// MQTT WebSocket bridge for frontend
-app.get('/api/mqtt/connect', (req, res) => {
-    // WebSocket bridge for frontend MQTT connection
-    res.json({ status: 'mqtt_connected', broker: 'broker.hivemq.com' });
-});
-
-// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🏥 KNH System Server running on port ${PORT}`);
-    console.log(`🌐 Neural MPC: http://localhost:${PORT}/api/neural/optimize`);
-    
-    // Connect MQTT
+    console.log(`🏥 KNH MPC System running on port ${PORT}`);
+    console.log(`📊 MPC Dashboard: http://localhost:${PORT}/mpc-dashboard`);
     mqttClient.connect();
 });
-
-module.exports = app;
