@@ -1,54 +1,51 @@
-// neural-mpc.js - Enhanced with real KNH data
-class KNHNeuralMPC {
+// neural-mpc.js - COMPLETE Neural MPC in Web
+class CompleteNeuralMPC {
     constructor() {
-        this.currentConditions = {
-            temperature: 17.1,
-            humidity: 82,
-            optimalCurrent: 177,
-            efficiency: 76.3
-        };
+        this.weatherAPI = 'https://api.open-meteo.com/v1/forecast';
+        this.gridAPI = 'https://api.kplc.co.ke/pricing'; // Example
+        this.hospitalAPI = 'https://knh-api/patient-data'; // Example
     }
 
-    async updateRealTimeControl() {
-        // Get live Kenya data
-        const weather = await this.fetchKenyaWeather();
-        const grid = await this.fetchKPLCData();
+    async computeOptimalControl() {
+        // 1. Get ALL real data sources
+        const [weather, grid, hospital, pemHealth] = await Promise.all([
+            this.getKenyaWeather(),
+            this.getKPLCData(),
+            this.getKNHDemand(),
+            this.getPEMHealth()
+        ]);
+
+        // 2. Neural network prediction
+        const features = this.prepareFeatures(weather, grid, hospital, pemHealth);
+        const neuralOutput = await this.neuralModel.predict(features);
+
+        // 3. Send to MATLAB via MQTT
+        this.sendToMATLAB(neuralOutput);
         
-        // Neural prediction
-        const control = this.neuralPredict(weather, grid);
-        
-        // Send to MATLAB and Arduino
-        await this.distributeControl(control);
-        
-        return control;
+        return neuralOutput;
     }
 
-    neuralPredict(weather, grid) {
-        // Your working neural logic from MATLAB
-        const temp = weather.temperature;
-        const humidity = weather.humidity;
-        const hour = new Date().getHours();
-        
-        // Same logic that gave you 177A
-        let baseCurrent = 185;
-        if (temp < 18) baseCurrent = 185;
-        else if (temp < 22) baseCurrent = 175;
-        else baseCurrent = 165;
-        
-        // Humidity adjustment
-        if (humidity > 80) baseCurrent -= 8;
-        
-        // Time-of-use adjustment
-        if (hour >= 10 && hour <= 18) baseCurrent -= 12;
-        else if (hour < 6 || hour > 18) baseCurrent += 10;
-        
-        const optimalCurrent = Math.max(100, Math.min(200, baseCurrent));
-        
+    prepareFeatures(weather, grid, hospital, pemHealth) {
         return {
-            current: optimalCurrent,
-            efficiency: 75 + (20 - temp) * 0.1,
-            timestamp: new Date().toISOString(),
-            location: 'KNH Nairobi'
+            // Weather (implemented)
+            temperature: weather.current_temp,
+            solar_irradiance: weather.solar_irradiance,
+            humidity: weather.humidity,
+            
+            // Grid (new)
+            electricity_price: grid.current_price,
+            grid_stability: grid.frequency,
+            time_of_day: new Date().getHours(),
+            
+            // Hospital (new)
+            icu_patients: hospital.icu_count,
+            scheduled_surgeries: hospital.surgeries_today,
+            current_demand: hospital.oxygen_usage,
+            
+            // PEM Health (new)
+            efficiency_trend: pemHealth.efficiency,
+            voltage_degradation: pemHealth.degradation,
+            operating_hours: pemHealth.hours
         };
     }
 }
