@@ -1,86 +1,116 @@
-// mqtt.js - ENHANCED WITH NEURAL TOPICS
-const mqtt = require('mqtt');
-
-class MQTTClient {
+// charts.js - ENHANCED WITH NEURAL VISUALIZATION
+class NeuralCharts {
     constructor() {
-        this.client = null;
-        this.neuralCallbacks = [];
-        this.pemCallbacks = [];
+        this.optimalCurrentChart = null;
+        this.efficiencyChart = null;
+        this.costChart = null;
+        this.initCharts();
     }
 
-    connect() {
-        this.client = mqtt.connect('tcp://broker.hivemq.com:1883');
-        
-        this.client.on('connect', () => {
-            console.log('✅ MQTT Connected to MATLAB & Arduino Bridge');
-            
-            // Subscribe to ALL required topics
-            this.client.subscribe('neural/controls');
-            this.client.subscribe('pem/electrolyzer/data');
-            this.client.subscribe('arduino/telemetry');
-            this.client.subscribe('system/alerts');
-            
-            console.log('📡 Subscribed to: neural/controls, pem/electrolyzer/data, arduino/telemetry');
+    initCharts() {
+        // Optimal Current Chart
+        this.optimalCurrentChart = new Chart('optimal-current-chart', {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Neural Optimal Current (A)',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            }
         });
 
-        this.client.on('message', (topic, message) => {
-            const data = JSON.parse(message.toString());
-            
-            switch(topic) {
-                case 'pem/electrolyzer/data':
-                    // From MATLAB - PEM telemetry
-                    this.pemCallbacks.forEach(callback => callback(data));
-                    break;
-                    
-                case 'arduino/telemetry':
-                    // From Arduino - real-time sensors
-                    console.log('🔌 Arduino:', data);
-                    break;
-                    
-                case 'system/alerts':
-                    // System alerts from any component
-                    this.handleSystemAlert(data);
-                    break;
+        // Efficiency Prediction Chart
+        this.efficiencyChart = new Chart('efficiency-chart', {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Actual Efficiency (%)',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)'
+                    },
+                    {
+                        label: 'Neural Prediction (%)',
+                        data: [],
+                        borderColor: 'rgb(54, 162, 235)'
+                    }
+                ]
+            }
+        });
+
+        // Cost Optimization Chart
+        this.costChart = new Chart('cost-chart', {
+            type: 'bar',
+            data: {
+                labels: ['Current', 'Neural Optimal'],
+                datasets: [{
+                    label: 'Cost (KES/m³ O₂)',
+                    data: [0, 0],
+                    backgroundColor: ['rgba(255, 99, 132, 0.5)', 'rgba(75, 192, 192, 0.5)']
+                }]
             }
         });
     }
 
-    // Send neural controls to MATLAB
-    sendToMATLAB(controlData) {
-        if (this.client && this.client.connected) {
-            this.client.publish('neural/controls', JSON.stringify(controlData));
-            console.log('📤 Neural→MATLAB:', controlData.optimal_current + 'A');
-            return true;
+    updateNeuralOptimization(neuralData) {
+        // Update optimal current chart
+        this.updateChart(this.optimalCurrentChart, neuralData.optimal_current);
+        
+        // Update efficiency comparison
+        this.updateEfficiencyComparison(neuralData.expected_efficiency);
+        
+        // Update cost comparison
+        this.updateCostComparison(neuralData.cost_per_m3);
+        
+        console.log('📈 Charts updated with neural optimization');
+    }
+
+    updateEfficiencyComparison(predictedEfficiency) {
+        // Add current actual efficiency from PEM data
+        const currentEfficiency = this.getCurrentEfficiency(); // From PEM telemetry
+        
+        this.efficiencyChart.data.labels.push(new Date().toLocaleTimeString());
+        this.efficiencyChart.data.datasets[0].data.push(currentEfficiency);
+        this.efficiencyChart.data.datasets[1].data.push(predictedEfficiency);
+        
+        // Keep last 20 points
+        if (this.efficiencyChart.data.labels.length > 20) {
+            this.efficiencyChart.data.labels.shift();
+            this.efficiencyChart.data.datasets[0].data.shift();
+            this.efficiencyChart.data.datasets[1].data.shift();
         }
-        return false;
+        
+        this.efficiencyChart.update();
     }
 
-    // Send commands to Arduino
-    sendToArduino(commandData) {
-        if (this.client && this.client.connected) {
-            this.client.publish('arduino/commands', JSON.stringify(commandData));
-            console.log('📤 MATLAB→Arduino:', commandData.command);
-            return true;
-        }
-        return false;
+    updateCostComparison(optimalCost) {
+        const currentCost = this.calculateCurrentCost(); // From current operation
+        
+        this.costChart.data.datasets[0].data = [currentCost, optimalCost];
+        this.costChart.update();
+        
+        // Show savings
+        const savings = ((currentCost - optimalCost) / currentCost * 100).toFixed(1);
+        document.getElementById('cost-savings').textContent = savings + '%';
     }
 
-    // Register callbacks for PEM data
-    onPEMData(callback) {
-        this.pemCallbacks.push(callback);
+    calculateCurrentCost() {
+        // Calculate current operational cost
+        // This would use real-time data from PEM system
+        return 4.2; // Example current cost
     }
 
-    // Register callbacks for neural commands
-    onNeuralControl(callback) {
-        this.neuralCallbacks.push(callback);
-    }
-
-    handleSystemAlert(alert) {
-        console.log('🚨 SYSTEM ALERT:', alert);
-        // Send to frontend, log, trigger notifications
+    getCurrentEfficiency() {
+        // Get current efficiency from PEM telemetry
+        return 72.5; // Example current efficiency
     }
 }
 
-// Export singleton instance
-const mqttClient = new MQTTClient();
-module.exports = mqttClient;
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    window.neuralCharts = new NeuralCharts();
+});
